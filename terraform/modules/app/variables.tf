@@ -72,6 +72,11 @@ variable "s3_access_policy_arns" {
   default     = {}
 }
 
+variable "s3_prefix_list_id" {
+  description = "Prefix list ID for S3 gateway endpoint"
+  type        = string
+}
+
 variable "container_port" {
   description = "Container port for ECS tasks"
   type        = number
