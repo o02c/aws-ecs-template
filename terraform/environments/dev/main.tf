@@ -47,6 +47,7 @@ module "lb" {
   private_subnet_ids    = module.network.private_subnet_ids
   alb_security_group_id = module.network.security_group_ids["${each.key}-alb"]
   ecs_security_group_id = module.network.security_group_ids["ecs"]
+  acm_certificate_arn   = module.dns.regional_certificate_arn
 }
 
 # --------------------------------------------------------------------------------
@@ -79,6 +80,7 @@ module "app" {
   }
   db_security_group_id   = module.network.security_group_ids["db"]
   vpce_security_group_id = module.network.security_group_ids["vpce"]
+  s3_prefix_list_id      = module.network.s3_prefix_list_id
   db_cluster_arn         = module.db.cluster_arn
   db_resource_id         = module.db.cluster_resource_id
   services               = local.services
@@ -107,6 +109,23 @@ module "cdn" {
   s3_bucket_regional_domain_name = module.storage[each.key].bucket_regional_domain_name
   s3_bucket_id                   = module.storage[each.key].bucket_id
   cloudfront_oac_id              = module.storage[each.key].cloudfront_oac_id
+}
+
+# --------------------------------------------------------------------------------
+# DNS / ACM
+# --------------------------------------------------------------------------------
+
+module "dns" {
+  source = "../../modules/dns"
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+
+  project_name = var.project_name
+  environment  = var.environment
+  domain_name  = var.domain_name
 }
 
 # --------------------------------------------------------------------------------

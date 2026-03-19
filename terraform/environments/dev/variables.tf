@@ -8,6 +8,11 @@ variable "environment" {
   type        = string
 }
 
+variable "domain_name" {
+  description = "Root domain name for the application"
+  type        = string
+}
+
 variable "db_master_username" {
   description = "Master username for Aurora cluster"
   type        = string
