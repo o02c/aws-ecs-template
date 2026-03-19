@@ -1,0 +1,11 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; }
+header { margin-bottom: 2rem; }
+h1 { color: #1a73e8; }
+h2 { margin: 1rem 0 0.5rem; }
+section { margin-bottom: 1.5rem; }
+#status { padding: 1rem; border-radius: 8px; background: #f0f0f0; }
+#status.ok { background: #e6f4ea; color: #137333; }
+#status.error { background: #fce8e6; color: #c5221f; }
+ul { list-style: none; }
+li { padding: 0.5rem; border-bottom: 1px solid #eee; }
