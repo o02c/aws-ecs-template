@@ -1,30 +1,13 @@
 # --------------------------------------------------------------------------------
-# Cache Policy for API
+# Cache Policy for API (Managed CachingDisabled)
 # --------------------------------------------------------------------------------
 
-resource "aws_cloudfront_cache_policy" "api" {
-  name        = "${var.project_name}-${var.environment}-${var.lane}-api"
-  comment     = "Cache policy for ${var.lane} API"
-  default_ttl = 0
-  max_ttl     = 0
-  min_ttl     = 0
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
 
-  parameters_in_cache_key_and_forwarded_to_origin {
-    cookies_config {
-      cookie_behavior = "all"
-    }
-
-    headers_config {
-      header_behavior = "whitelist"
-      headers {
-        items = ["Authorization", "Host"]
-      }
-    }
-
-    query_strings_config {
-      query_string_behavior = "all"
-    }
-  }
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
 }
 
 # --------------------------------------------------------------------------------

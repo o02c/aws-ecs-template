@@ -12,3 +12,8 @@ output "distribution_arn" {
   description = "CloudFront distribution ARN"
   value       = aws_cloudfront_distribution.this.arn
 }
+
+output "distribution_hosted_zone_id" {
+  description = "CloudFront distribution hosted zone ID"
+  value       = aws_cloudfront_distribution.this.hosted_zone_id
+}
