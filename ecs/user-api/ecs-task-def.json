@@ -1,0 +1,32 @@
+{
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "{{ tfstate `module.app.aws_ecr_repository.this["user-api"].repository_url` }}:latest",
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "{{ tfstate `module.app.aws_cloudwatch_log_group.this["user-api"].name` }}",
+          "awslogs-region": "ap-northeast-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "environment": [],
+      "secrets": []
+    }
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "{{ tfstate `module.app.aws_iam_role.task_execution.arn` }}",
+  "taskRoleArn": "{{ tfstate `module.app.aws_iam_role.task["user-api"].arn` }}",
+  "family": "user-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"]
+}
