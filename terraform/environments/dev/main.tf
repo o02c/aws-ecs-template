@@ -133,16 +133,16 @@ module "dns" {
 }
 
 # --------------------------------------------------------------------------------
-# CI/CD
+# CI/CD (deploy separately - see GitHub issue #2)
 # --------------------------------------------------------------------------------
 
-module "cicd" {
-  source = "../../modules/cicd"
-
-  project_name        = var.project_name
-  environment         = var.environment
-  ecs_cluster_name    = module.app.ecs_cluster_name
-  ecr_repository_urls = module.app.ecr_repository_urls
-  services            = local.services
-  ecs_task_role_arns  = module.app.task_role_arns
-}
+# module "cicd" {
+#   source = "../../modules/cicd"
+#
+#   project_name        = var.project_name
+#   environment         = var.environment
+#   ecs_cluster_name    = module.app.ecs_cluster_name
+#   ecr_repository_urls = module.app.ecr_repository_urls
+#   services            = local.services
+#   ecs_task_role_arns  = module.app.task_role_arns
+# }
