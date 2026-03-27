@@ -1,12 +1,11 @@
 region: ap-northeast-1
-profile: terraform
-cluster: '{{ tfstate `module.app.ecs_cluster_name` }}'
+cluster: myapp-dev
 service: user-api
-service_definition: ecs-service-def.jsonnet
-task_definition: ecs-task-def.jsonnet
+service_definition: ecs-service-def.json
+task_definition: ecs-task-def.json
 timeout: 10m0s
 
 plugins:
   - name: tfstate
     config:
-      url: s3://{{ env `TFSTATE_BUCKET` }}/dev/terraform.tfstate
+      path: ../../terraform/environments/dev/terraform.tfstate

@@ -50,3 +50,13 @@ variable "container_port" {
   type        = number
   default     = 80
 }
+
+variable "log_bucket_id" {
+  description = "S3 bucket ID for ALB access logging"
+  type        = string
+}
+
+variable "log_prefix" {
+  description = "Prefix for ALB access log objects"
+  type        = string
+}

@@ -72,6 +72,17 @@ variable "s3_access_policy_arns" {
   default     = {}
 }
 
+variable "s3_prefix_list_id" {
+  description = "Prefix list ID for S3 gateway endpoint"
+  type        = string
+}
+
+variable "cloudfront_signing_key_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing the CloudFront signing private key"
+  type        = string
+  default     = ""
+}
+
 variable "container_port" {
   description = "Container port for ECS tasks"
   type        = number
@@ -82,4 +93,10 @@ variable "log_retention_days" {
   description = "CloudWatch log retention in days"
   type        = number
   default     = 30
+}
+
+variable "logs_kms_key_arn" {
+  description = "KMS key ARN for CloudWatch Logs encryption"
+  type        = string
+  default     = ""
 }

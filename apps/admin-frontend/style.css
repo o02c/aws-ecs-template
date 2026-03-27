@@ -1,0 +1,12 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; }
+header { margin-bottom: 2rem; }
+h1 { color: #e65100; }
+h2 { margin: 1rem 0 0.5rem; }
+section { margin-bottom: 1.5rem; }
+#status { padding: 1rem; border-radius: 8px; background: #f0f0f0; }
+#status.ok { background: #e6f4ea; color: #137333; }
+#status.error { background: #fce8e6; color: #c5221f; }
+.stat { display: inline-block; padding: 1rem 2rem; margin: 0.5rem; border-radius: 8px; background: #fff3e0; }
+.stat-value { font-size: 2rem; font-weight: bold; }
+.stat-label { font-size: 0.875rem; color: #666; }

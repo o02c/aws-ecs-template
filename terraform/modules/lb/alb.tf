@@ -9,6 +9,12 @@ resource "aws_lb" "this" {
   security_groups    = [var.alb_security_group_id]
   subnets            = values(var.private_subnet_ids)
 
+  access_logs {
+    bucket  = var.log_bucket_id
+    prefix  = var.log_prefix
+    enabled = true
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-${var.lane}"
   }

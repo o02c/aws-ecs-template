@@ -40,6 +40,12 @@ variable "master_password" {
   sensitive   = true
 }
 
+variable "kms_key_arn" {
+  description = "KMS key ARN for Aurora storage encryption"
+  type        = string
+  default     = ""
+}
+
 variable "database_name" {
   description = "Default database name"
   type        = string
