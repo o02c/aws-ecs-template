@@ -1,4 +1,35 @@
 # --------------------------------------------------------------------------------
+# Data Sources
+# --------------------------------------------------------------------------------
+
+data "aws_caller_identity" "current" {}
+
+# --------------------------------------------------------------------------------
+# KMS
+# --------------------------------------------------------------------------------
+
+module "kms" {
+  source = "../../modules/kms"
+
+  project_name   = var.project_name
+  environment    = var.environment
+  aws_account_id = data.aws_caller_identity.current.account_id
+  aws_region     = local.aws_region
+}
+
+# --------------------------------------------------------------------------------
+# Logging
+# --------------------------------------------------------------------------------
+
+module "logging" {
+  source = "../../modules/logging"
+
+  project_name = var.project_name
+  environment  = var.environment
+  region       = local.aws_region
+}
+
+# --------------------------------------------------------------------------------
 # Network
 # --------------------------------------------------------------------------------
 
@@ -30,6 +61,7 @@ module "db" {
 
   master_username = var.db_master_username
   master_password = var.db_master_password
+  kms_key_arn     = module.kms.key_arns["rds"]
 }
 
 # --------------------------------------------------------------------------------
@@ -48,6 +80,8 @@ module "lb" {
   alb_security_group_id = module.network.security_group_ids["${each.key}-alb"]
   ecs_security_group_id = module.network.security_group_ids["ecs"]
   acm_certificate_arn   = module.dns.regional_certificate_arn
+  log_bucket_id         = module.logging.bucket_id
+  log_prefix            = "alb/${each.key}"
 }
 
 # --------------------------------------------------------------------------------
@@ -58,9 +92,12 @@ module "storage" {
   source   = "../../modules/storage"
   for_each = local.lanes
 
-  project_name = var.project_name
-  environment  = var.environment
-  lane         = each.key
+  project_name  = var.project_name
+  environment   = var.environment
+  lane          = each.key
+  kms_key_arn   = module.kms.key_arns["s3"]
+  log_bucket_id = module.logging.bucket_id
+  log_prefix    = "s3/${each.key}/"
 }
 
 # --------------------------------------------------------------------------------
@@ -91,6 +128,8 @@ module "app" {
   s3_access_policy_arns = {
     for lane, mod in module.storage : lane => mod.s3_access_policy_arn
   }
+  cloudfront_signing_key_secret_arn = var.cloudfront_signing_key_secret_arn
+  logs_kms_key_arn                 = module.kms.key_arns["logs"]
 }
 
 # --------------------------------------------------------------------------------
@@ -100,6 +139,11 @@ module "app" {
 module "cdn" {
   source   = "../../modules/cdn"
   for_each = local.lanes
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 
   project_name                   = var.project_name
   environment                    = var.environment
@@ -113,6 +157,10 @@ module "cdn" {
   aliases                        = ["${each.key}.${var.domain_name}"]
   domain_name                    = var.domain_name
   route53_zone_id                = module.dns.zone_id
+  enable_signing                 = var.cloudfront_signing_public_key_pem != ""
+  signing_public_key_pem         = var.cloudfront_signing_public_key_pem
+  log_bucket_domain_name         = module.logging.bucket_domain_name
+  log_prefix                     = "cloudfront/${each.key}/"
 }
 
 # --------------------------------------------------------------------------------
@@ -130,6 +178,19 @@ module "dns" {
   project_name = var.project_name
   environment  = var.environment
   domain_name  = var.domain_name
+}
+
+# --------------------------------------------------------------------------------
+# DNS Firewall (disabled - cost vs benefit consideration for private-only VPC)
+# --------------------------------------------------------------------------------
+
+module "dns_firewall" {
+  source = "../../modules/dns_firewall"
+
+  project_name  = var.project_name
+  environment   = var.environment
+  vpc_id        = module.network.vpc_id
+  block_domains = []
 }
 
 # --------------------------------------------------------------------------------

@@ -29,7 +29,8 @@ locals {
     ecr-dkr = "com.amazonaws.${local.aws_region}.ecr.dkr"
     logs    = "com.amazonaws.${local.aws_region}.logs"
     sts     = "com.amazonaws.${local.aws_region}.sts"
-    ssm     = "com.amazonaws.${local.aws_region}.ssm"
+    ssm            = "com.amazonaws.${local.aws_region}.ssm"
+    secretsmanager = "com.amazonaws.${local.aws_region}.secretsmanager"
   }
 
   gateway_endpoints = {

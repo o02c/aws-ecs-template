@@ -2,7 +2,7 @@
   "containerDefinitions": [
     {
       "name": "app",
-      "image": "{{ tfstate `module.app.aws_ecr_repository.this["admin-api"].repository_url` }}:latest",
+      "image": "{{ tfstate `module.app.aws_ecr_repository.this[\"admin-api\"].repository_url` }}:latest",
       "portMappings": [
         {
           "containerPort": 80,
@@ -13,19 +13,44 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "{{ tfstate `module.app.aws_cloudwatch_log_group.this["admin-api"].name` }}",
+          "awslogs-group": "{{ tfstate `module.app.aws_cloudwatch_log_group.this[\"admin-api\"].name` }}",
           "awslogs-region": "ap-northeast-1",
           "awslogs-stream-prefix": "ecs"
         }
       },
-      "environment": [],
+      "environment": [
+        {
+          "name": "S3_BUCKET_NAME",
+          "value": "{{ tfstate `module.storage[\"admin\"].aws_s3_bucket.this.id` }}"
+        },
+        {
+          "name": "CLOUDFRONT_DOMAIN",
+          "value": "admin.{{ tfstate `var.domain_name` }}"
+        },
+        {
+          "name": "CLOUDFRONT_KEY_PAIR_ID",
+          "value": "{{ tfstate `module.cdn[\"admin\"].aws_cloudfront_public_key.signing[\"default\"].id` }}"
+        },
+        {
+          "name": "CLOUDFRONT_SIGNING_KEY_SECRET_ARN",
+          "value": "{{ tfstate `var.cloudfront_signing_key_secret_arn` }}"
+        },
+        {
+          "name": "SIGNED_URL_TTL_SECONDS",
+          "value": "86400"
+        },
+        {
+          "name": "S3_FILES_PREFIX",
+          "value": "files"
+        }
+      ],
       "secrets": []
     }
   ],
   "cpu": "256",
   "memory": "512",
   "executionRoleArn": "{{ tfstate `module.app.aws_iam_role.task_execution.arn` }}",
-  "taskRoleArn": "{{ tfstate `module.app.aws_iam_role.task["admin-api"].arn` }}",
+  "taskRoleArn": "{{ tfstate `module.app.aws_iam_role.task[\"admin-api\"].arn` }}",
   "family": "admin-api",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"]

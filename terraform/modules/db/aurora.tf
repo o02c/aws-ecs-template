@@ -16,6 +16,7 @@ resource "aws_rds_cluster" "this" {
   vpc_security_group_ids              = [var.db_security_group_id]
   iam_database_authentication_enabled = true
   storage_encrypted                   = true
+  kms_key_id                          = var.kms_key_arn
   deletion_protection                 = var.deletion_protection
   skip_final_snapshot                 = var.skip_final_snapshot
   final_snapshot_identifier           = "${var.project_name}-${var.environment}-aurora-final"

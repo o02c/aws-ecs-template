@@ -58,3 +58,43 @@ variable "route53_zone_id" {
   description = "Route53 hosted zone ID"
   type        = string
 }
+
+variable "enable_signing" {
+  description = "Enable CloudFront signed URL support"
+  type        = bool
+  default     = false
+}
+
+variable "signing_public_key_pem" {
+  description = "PEM-encoded public key for CloudFront signed URLs"
+  type        = string
+  default     = ""
+}
+
+variable "files_path_pattern" {
+  description = "Path pattern for signed file delivery"
+  type        = string
+  default     = "/files/*"
+}
+
+variable "waf_rate_limit" {
+  description = "Maximum number of requests per 5-minute period per IP"
+  type        = number
+  default     = 2000
+}
+
+variable "geo_restriction_locations" {
+  description = "List of ISO 3166-1 alpha-2 country codes for CloudFront geo restriction whitelist"
+  type        = list(string)
+  default     = ["JP"]
+}
+
+variable "log_bucket_domain_name" {
+  description = "Domain name of the S3 bucket for access logging"
+  type        = string
+}
+
+variable "log_prefix" {
+  description = "Prefix for CloudFront access log objects"
+  type        = string
+}
