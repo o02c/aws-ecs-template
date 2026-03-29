@@ -28,6 +28,7 @@ module "network" {
   vpc_cidr          = local.vpc_cidr
   public_subnets    = local.public_subnets
   private_subnets   = local.private_subnets
+  enable_nat        = false
   enable_ha_nat     = false
   project_vpc_cidrs = local.project_vpc_cidrs
   gateway_endpoints = local.gateway_endpoints

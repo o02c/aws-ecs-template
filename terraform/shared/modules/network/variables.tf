@@ -23,6 +23,12 @@ variable "private_subnets" {
   type        = map(string)
 }
 
+variable "enable_nat" {
+  description = "Enable NAT Gateway for internet egress"
+  type        = bool
+  default     = true
+}
+
 variable "enable_ha_nat" {
   description = "Enable HA NAT Gateway (one per AZ). Set to false for single NAT (cost saving)"
   type        = bool

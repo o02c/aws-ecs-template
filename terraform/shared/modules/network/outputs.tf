@@ -30,5 +30,5 @@ output "transit_gateway_route_table_id" {
 
 output "nat_gateway_public_ips" {
   description = "NAT Gateway public IPs"
-  value       = { for az, eip in aws_eip.nat : az => eip.public_ip }
+  value       = var.enable_nat ? { for az, eip in aws_eip.nat : az => eip.public_ip } : {}
 }

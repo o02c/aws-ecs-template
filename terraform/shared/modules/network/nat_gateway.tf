@@ -2,8 +2,14 @@
 # Elastic IP for NAT Gateway
 # --------------------------------------------------------------------------------
 
+locals {
+  nat_subnets = var.enable_nat ? (
+    var.enable_ha_nat ? var.public_subnets : { for k, v in var.public_subnets : k => v if k == keys(var.public_subnets)[0] }
+  ) : {}
+}
+
 resource "aws_eip" "nat" {
-  for_each = var.enable_ha_nat ? var.public_subnets : { for k, v in var.public_subnets : k => v if k == keys(var.public_subnets)[0] }
+  for_each = local.nat_subnets
 
   domain = "vpc"
 
