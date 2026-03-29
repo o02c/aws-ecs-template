@@ -13,9 +13,7 @@ resource "aws_iam_policy" "s3_access" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:ListBucket"
+          "s3:PutObject"
         ]
         Resource = [
           aws_s3_bucket.this.arn,

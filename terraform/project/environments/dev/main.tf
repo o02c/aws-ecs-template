@@ -132,6 +132,7 @@ module "app" {
     for lane in keys(local.lanes) : lane => module.network.security_group_ids["${lane}-alb"]
   }
   db_security_group_id   = module.network.security_group_ids["db"]
+  vpce_security_group_id = module.network.security_group_ids["vpce"]
   s3_prefix_list_id      = module.network.s3_prefix_list_id
   db_cluster_arn         = module.db.cluster_arn
   db_resource_id         = module.db.cluster_resource_id
@@ -192,14 +193,14 @@ module "dns" {
 # DNS Firewall (disabled - cost vs benefit consideration for private-only VPC)
 # --------------------------------------------------------------------------------
 
-module "dns_firewall" {
-  source = "../../modules/dns_firewall"
-
-  project_name  = var.project_name
-  environment   = var.environment
-  vpc_id        = module.network.vpc_id
-  block_domains = []
-}
+# module "dns_firewall" {
+#   source = "../../modules/dns_firewall"
+#
+#   project_name  = var.project_name
+#   environment   = var.environment
+#   vpc_id        = module.network.vpc_id
+#   block_domains = []
+# }
 
 # --------------------------------------------------------------------------------
 # CI/CD (deploy separately - see GitHub issue #2)

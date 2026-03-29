@@ -41,3 +41,8 @@ output "s3_bucket_ids" {
   description = "Map of lane to S3 bucket ID"
   value       = { for lane, s in module.storage : lane => s.bucket_id }
 }
+
+output "ecs_cluster_name" {
+  description = "ECS cluster name"
+  value       = module.app.ecs_cluster_name
+}

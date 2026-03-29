@@ -33,6 +33,10 @@ variable "db_security_group_id" {
   type        = string
 }
 
+variable "vpce_security_group_id" {
+  description = "Security group ID for VPC endpoints"
+  type        = string
+}
 
 variable "db_cluster_arn" {
   description = "Aurora cluster ARN"

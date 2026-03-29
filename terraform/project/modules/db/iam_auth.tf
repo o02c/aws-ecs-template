@@ -15,7 +15,7 @@ resource "aws_iam_policy" "rds_iam_auth" {
       {
         Effect   = "Allow"
         Action   = "rds-db:connect"
-        Resource = "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_rds_cluster.this.cluster_resource_id}/*"
+        Resource = "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_rds_cluster.this.cluster_resource_id}/${var.db_iam_username}"
       }
     ]
   })

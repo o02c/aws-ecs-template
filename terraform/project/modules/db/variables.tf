@@ -84,3 +84,9 @@ variable "skip_final_snapshot" {
   type        = bool
   default     = true
 }
+
+variable "db_iam_username" {
+  description = "Database username for IAM authentication"
+  type        = string
+  default     = "app"
+}
