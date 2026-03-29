@@ -1,51 +1,180 @@
-set dotenv-load
+# AWS ECS Template - Task Runner
+# Usage: just <recipe> [args]
 
-tf_dir := "terraform/environments/dev"
+set positional-arguments := true
 
-# --------------------------------------------------------------------------------
-# Terraform
-# --------------------------------------------------------------------------------
+aws_profile := "terraform"
+aws_region := "ap-northeast-1"
+project_name := "myapp"
+environment := "dev"
 
-tf-init:
-    terraform -chdir={{tf_dir}} init
+export AWS_PROFILE := aws_profile
+export AWS_REGION := aws_region
 
-tf-plan:
-    terraform -chdir={{tf_dir}} plan
-
-tf-apply:
-    terraform -chdir={{tf_dir}} apply
-
-tf-destroy:
-    terraform -chdir={{tf_dir}} destroy
+# Show available recipes
+default:
+    @just --list
 
 # --------------------------------------------------------------------------------
-# Key Management
+# Setup / Destroy
 # --------------------------------------------------------------------------------
 
-generate-signing-keypair:
-    bash scripts/generate-signing-keypair.sh
+# Full setup: shared → project → build → deploy
+setup: shared-apply project-apply build deploy
+    @echo ""
+    @echo "=== Setup Complete ==="
+    @echo "User:  https://user.o2c.click/health"
+    @echo "Admin: https://admin.o2c.click/health"
+
+# Full destroy: ECS → S3 → project → shared
+destroy: ecs-delete s3-empty project-destroy shared-destroy
+    @echo ""
+    @echo "=== Destroy Complete ==="
 
 # --------------------------------------------------------------------------------
-# Docker
+# Terraform - Shared
 # --------------------------------------------------------------------------------
 
-docker-build service:
-    docker build -t {{service}}:latest apps/{{service}}
+# Init shared infrastructure
+shared-init:
+    terraform -chdir=terraform/shared/environments/{{environment}} init -upgrade
 
-docker-push service:
+# Plan shared infrastructure
+shared-plan: shared-init
+    terraform -chdir=terraform/shared/environments/{{environment}} plan
+
+# Apply shared infrastructure
+shared-apply: shared-init
+    terraform -chdir=terraform/shared/environments/{{environment}} apply -auto-approve
+
+# Destroy shared infrastructure
+shared-destroy:
+    terraform -chdir=terraform/shared/environments/{{environment}} destroy
+
+# --------------------------------------------------------------------------------
+# Terraform - Project
+# --------------------------------------------------------------------------------
+
+# Init project infrastructure
+project-init:
+    terraform -chdir=terraform/project/environments/{{environment}} init -upgrade
+
+# Plan project infrastructure
+project-plan: project-init
+    terraform -chdir=terraform/project/environments/{{environment}} plan
+
+# Apply project infrastructure
+project-apply: project-init
+    terraform -chdir=terraform/project/environments/{{environment}} apply -auto-approve
+
+# Destroy project infrastructure
+project-destroy:
+    terraform -chdir=terraform/project/environments/{{environment}} destroy
+
+# --------------------------------------------------------------------------------
+# Docker Build & Push
+# --------------------------------------------------------------------------------
+
+# Build and push a single service (e.g., just build-one user-api)
+build-one service:
     #!/usr/bin/env bash
     set -euo pipefail
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    REGION=${AWS_REGION:-ap-northeast-1}
-    ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
-    REPO="${PROJECT_NAME:-myapp}-${ENVIRONMENT:-dev}-{{service}}"
-    aws ecr get-login-password --region "${REGION}" | docker login --username AWS --password-stdin "${ECR_URI}"
-    docker tag {{service}}:latest "${ECR_URI}/${REPO}:latest"
-    docker push "${ECR_URI}/${REPO}:latest"
+    ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
+    REPO="{{project_name}}-{{environment}}-{{service}}"
+    TAG="v$(date +%Y%m%d%H%M%S)"
+    IMAGE="${ECR_REGISTRY}/${REPO}:${TAG}"
+    aws ecr get-login-password --region {{aws_region}} | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+    echo "--- Build: {{service}} ($TAG) ---"
+    docker build --platform linux/amd64 -t "$IMAGE" "apps/{{service}}"
+    docker push "$IMAGE"
+    sed -i '' "s/:v[0-9]*/:${TAG}/" "ecs/{{service}}/ecs-task-def.jsonnet"
+    echo "Pushed $IMAGE"
+
+# Build and push all services
+build: (build-one "user-api") (build-one "admin-api")
 
 # --------------------------------------------------------------------------------
-# Deploy
+# ecspresso
 # --------------------------------------------------------------------------------
 
-deploy service:
-    ecspresso deploy --config ecs/{{service}}/ecspresso.yml
+# Deploy a single service (e.g., just deploy-one user-api)
+deploy-one service:
+    cd ecs/{{service}} && ecspresso deploy
+
+# Deploy all services
+deploy: (deploy-one "user-api") (deploy-one "admin-api")
+
+# Verify ecspresso config
+verify service:
+    cd ecs/{{service}} && ecspresso verify
+
+# Verify all services
+verify-all: (verify "user-api") (verify "admin-api")
+
+# Render task/service definitions
+render service:
+    @echo "--- Task Definition ---"
+    @cd ecs/{{service}} && ecspresso render task-definition
+    @echo ""
+    @echo "--- Service Definition ---"
+    @cd ecs/{{service}} && ecspresso render service-definition
+
+# Show diff against running service
+diff service:
+    cd ecs/{{service}} && ecspresso diff
+
+# Rollback a service
+rollback service:
+    cd ecs/{{service}} && ecspresso rollback
+
+# Scale a service (e.g., just scale user-api 2)
+scale service count:
+    cd ecs/{{service}} && ecspresso scale --tasks {{count}}
+
+# ECS Exec into a service container
+exec service:
+    cd ecs/{{service}} && ecspresso exec --command /bin/sh
+
+# --------------------------------------------------------------------------------
+# Destroy helpers
+# --------------------------------------------------------------------------------
+
+# Delete all ECS services
+ecs-delete:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for service in user-api admin-api; do
+        echo "--- Deleting $service ---"
+        (cd "ecs/$service" && ecspresso delete --force --terminate) || true
+    done
+
+# Empty all S3 buckets (including versioned objects)
+s3-empty:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    for bucket in \
+        "{{project_name}}-{{environment}}-user-assets" \
+        "{{project_name}}-{{environment}}-admin-assets" \
+        "{{project_name}}-{{environment}}-access-logs-${ACCOUNT_ID}"; do
+        echo "--- Emptying $bucket ---"
+        aws s3 rm "s3://$bucket" --recursive 2>/dev/null || true
+        python3 scripts/empty-versioned-bucket.py "$bucket"
+        echo "  done"
+    done
+
+# --------------------------------------------------------------------------------
+# Utility
+# --------------------------------------------------------------------------------
+
+# Check connectivity for all lanes
+check:
+    @echo "--- user ---"
+    @curl -sf https://user.o2c.click/health && echo ""
+    @echo "--- admin ---"
+    @curl -sf https://admin.o2c.click/health && echo ""
+
+# Generate CloudFront signing keypair
+generate-signing-keypair:
+    bash scripts/generate-signing-keypair.sh
