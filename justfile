@@ -2,13 +2,13 @@
 # Usage: just <recipe> [args]
 
 set positional-arguments := true
+set dotenv-load := true
 
-aws_profile := "terraform"
 aws_region := "ap-northeast-1"
 project_name := "myapp"
 environment := "dev"
 
-export AWS_PROFILE := aws_profile
+export AWS_PROFILE := env("AWS_PROFILE", "terraform")
 export AWS_REGION := aws_region
 
 # Show available recipes
@@ -88,24 +88,65 @@ project-destroy:
 # Docker Build & Push
 # --------------------------------------------------------------------------------
 
-# Build and push a single service (e.g., just build-one user-api)
-build-one service:
+# Image tag from .env (set by build recipes)
+image_tag := env("IMAGE_TAG", `git rev-parse --short HEAD`)
+
+# ECR login
+ecr-login:
+    aws ecr get-login-password --region {{aws_region}} | \
+        docker login --username AWS --password-stdin \
+        "$(aws sts get-caller-identity --query Account --output text).dkr.ecr.{{aws_region}}.amazonaws.com"
+
+# Build and push a single app service (e.g., just build-one user-api)
+build-one service: ecr-login
     #!/usr/bin/env bash
     set -euo pipefail
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
     ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
-    REPO="{{project_name}}-{{environment}}-{{service}}"
-    TAG="v$(date +%Y%m%d%H%M%S)"
-    IMAGE="${ECR_REGISTRY}/${REPO}:${TAG}"
-    aws ecr get-login-password --region {{aws_region}} | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-    echo "--- Build: {{service}} ($TAG) ---"
+    IMAGE="${ECR_REGISTRY}/{{project_name}}-{{environment}}-{{service}}:{{image_tag}}"
+    echo "--- Build: {{service}} ({{image_tag}}) ---"
     docker build --platform linux/amd64 -t "$IMAGE" "apps/{{service}}"
     docker push "$IMAGE"
-    sed -i.bak "s/:v[0-9]*/:${TAG}/" "ecs/{{service}}/ecs-task-def.jsonnet" && rm -f "ecs/{{service}}/ecs-task-def.jsonnet.bak"
     echo "Pushed $IMAGE"
 
-# Build and push all services
-build: (build-one "user-api") (build-one "admin-api")
+# Build and push nginx sidecar
+build-nginx: ecr-login
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
+    IMAGE="${ECR_REGISTRY}/{{project_name}}-{{environment}}-nginx:{{image_tag}}"
+    echo "--- Build: nginx ({{image_tag}}) ---"
+    docker build --platform linux/amd64 -t "$IMAGE" "ecs/nginx"
+    docker push "$IMAGE"
+    echo "Pushed $IMAGE"
+
+# Build and push Fluent Bit sidecar
+build-fluent-bit: ecr-login
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
+    IMAGE="${ECR_REGISTRY}/{{project_name}}-{{environment}}-fluent-bit:{{image_tag}}"
+    echo "--- Build: fluent-bit ({{image_tag}}) ---"
+    docker build --platform linux/amd64 -t "$IMAGE" "ecs/fluent-bit"
+    docker push "$IMAGE"
+    echo "Pushed $IMAGE"
+
+# Write current image tag to .env
+_update-env-tag:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    TAG=$(git rev-parse --short HEAD)
+    if grep -q '^IMAGE_TAG=' .env 2>/dev/null; then
+        sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=${TAG}/" .env && rm -f .env.bak
+    else
+        echo "IMAGE_TAG=${TAG}" >> .env
+    fi
+    echo "IMAGE_TAG=${TAG} written to .env"
+
+# Build and push all images (apps + nginx + fluent-bit)
+build: _update-env-tag build-nginx build-fluent-bit (build-one "user-api") (build-one "admin-api")
 
 # --------------------------------------------------------------------------------
 # ecspresso
@@ -113,10 +154,17 @@ build: (build-one "user-api") (build-one "admin-api")
 
 # Deploy a single service (e.g., just deploy-one user-api)
 deploy-one service:
-    cd ecs/{{service}} && ecspresso deploy
+    cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} FLUENTBIT_IMAGE_TAG={{image_tag}} ecspresso deploy
+    @echo "Deployed {{service}} with IMAGE_TAG={{image_tag}}"
 
 # Deploy all services
 deploy: (deploy-one "user-api") (deploy-one "admin-api")
+
+# Build, push, and deploy a single service (full flow)
+ship service: build-nginx build-fluent-bit (build-one service) (deploy-one service)
+
+# Build, push, and deploy all services
+ship-all: build deploy
 
 # Verify ecspresso config
 verify service:
@@ -170,7 +218,8 @@ s3-empty:
     for bucket in \
         "{{project_name}}-{{environment}}-user-assets" \
         "{{project_name}}-{{environment}}-admin-assets" \
-        "{{project_name}}-{{environment}}-access-logs-${ACCOUNT_ID}"; do
+        "{{project_name}}-{{environment}}-access-logs-${ACCOUNT_ID}" \
+        "{{project_name}}-{{environment}}-audit-logs-${ACCOUNT_ID}"; do
         echo "--- Emptying $bucket ---"
         aws s3 rm "s3://$bucket" --recursive 2>/dev/null || true
         python3 scripts/empty-versioned-bucket.py "$bucket"

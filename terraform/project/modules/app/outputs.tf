@@ -27,3 +27,23 @@ output "log_group_names" {
   description = "Map of service to CloudWatch log group name"
   value       = { for name, lg in aws_cloudwatch_log_group.this : name => lg.name }
 }
+
+output "nginx_ecr_repository_url" {
+  description = "nginx ECR repository URL"
+  value       = aws_ecr_repository.nginx.repository_url
+}
+
+output "fluent_bit_ecr_repository_url" {
+  description = "Fluent Bit ECR repository URL"
+  value       = aws_ecr_repository.fluent_bit.repository_url
+}
+
+output "audit_log_bucket_id" {
+  description = "Audit log S3 bucket ID"
+  value       = aws_s3_bucket.audit_logs.id
+}
+
+output "firehose_delivery_stream_name" {
+  description = "Firehose delivery stream name for audit logs"
+  value       = aws_kinesis_firehose_delivery_stream.audit_logs.name
+}

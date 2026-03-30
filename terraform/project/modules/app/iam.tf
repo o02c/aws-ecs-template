@@ -70,3 +70,34 @@ resource "aws_iam_role_policy_attachment" "task_s3_access" {
   role       = aws_iam_role.task[each.key].name
   policy_arn = var.s3_access_policy_arns[each.value.lane]
 }
+
+# --------------------------------------------------------------------------------
+# FireLens Permissions (CloudWatch Logs + Firehose)
+# --------------------------------------------------------------------------------
+
+resource "aws_iam_role_policy" "task_firelens" {
+  for_each = var.services
+
+  name = "firelens-access"
+  role = aws_iam_role.task[each.key].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "${aws_cloudwatch_log_group.this[each.key].arn}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "firehose:PutRecordBatch"
+        Resource = aws_kinesis_firehose_delivery_stream.audit_logs.arn
+      }
+    ]
+  })
+}

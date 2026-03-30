@@ -148,7 +148,9 @@ module "app" {
     for lane, mod in module.storage : lane => mod.s3_access_policy_arn
   }
   cloudfront_signing_key_secret_arn = var.cloudfront_signing_key_secret_arn
-  logs_kms_key_arn                 = module.kms.key_arns["logs"]
+  logs_kms_key_arn                  = module.kms.key_arns["logs"]
+  aws_account_id                    = data.aws_caller_identity.current.account_id
+  s3_kms_key_arn                    = module.kms.key_arns["s3"]
 }
 
 # --------------------------------------------------------------------------------
