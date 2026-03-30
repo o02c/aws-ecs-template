@@ -8,6 +8,9 @@ aws_region := "ap-northeast-1"
 project_name := "myapp"
 environment := "dev"
 
+# Image tag: always use current git SHA
+image_tag := `git rev-parse --short HEAD`
+
 export AWS_PROFILE := env("AWS_PROFILE", "terraform")
 export AWS_REGION := aws_region
 
@@ -88,9 +91,6 @@ project-destroy:
 # Docker Build & Push
 # --------------------------------------------------------------------------------
 
-# Image tag from .env (set by build recipes)
-image_tag := env("IMAGE_TAG", `git rev-parse --short HEAD`)
-
 # ECR login
 ecr-login:
     aws ecr get-login-password --region {{aws_region}} | \
@@ -133,20 +133,16 @@ build-fluent-bit: ecr-login
     docker push "$IMAGE"
     echo "Pushed $IMAGE"
 
-# Write current image tag to .env
-_update-env-tag:
+# Build and push all images (apps + nginx + fluent-bit), then save tag to .env
+build: build-nginx build-fluent-bit (build-one "user-api") (build-one "admin-api")
     #!/usr/bin/env bash
     set -euo pipefail
-    TAG=$(git rev-parse --short HEAD)
     if grep -q '^IMAGE_TAG=' .env 2>/dev/null; then
-        sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=${TAG}/" .env && rm -f .env.bak
+        sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG={{image_tag}}/" .env && rm -f .env.bak
     else
-        echo "IMAGE_TAG=${TAG}" >> .env
+        echo "IMAGE_TAG={{image_tag}}" >> .env
     fi
-    echo "IMAGE_TAG=${TAG} written to .env"
-
-# Build and push all images (apps + nginx + fluent-bit)
-build: _update-env-tag build-nginx build-fluent-bit (build-one "user-api") (build-one "admin-api")
+    echo "IMAGE_TAG={{image_tag}} saved to .env"
 
 # --------------------------------------------------------------------------------
 # ecspresso
@@ -155,7 +151,6 @@ build: _update-env-tag build-nginx build-fluent-bit (build-one "user-api") (buil
 # Deploy a single service (e.g., just deploy-one user-api)
 deploy-one service:
     cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} FLUENTBIT_IMAGE_TAG={{image_tag}} ecspresso deploy
-    @echo "Deployed {{service}} with IMAGE_TAG={{image_tag}}"
 
 # Deploy all services
 deploy: (deploy-one "user-api") (deploy-one "admin-api")
@@ -176,14 +171,14 @@ verify-all: (verify "user-api") (verify "admin-api")
 # Render task/service definitions
 render service:
     @echo "--- Task Definition ---"
-    @cd ecs/{{service}} && ecspresso render task-definition
+    @cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} FLUENTBIT_IMAGE_TAG={{image_tag}} ecspresso render task-definition
     @echo ""
     @echo "--- Service Definition ---"
     @cd ecs/{{service}} && ecspresso render service-definition
 
 # Show diff against running service
 diff service:
-    cd ecs/{{service}} && ecspresso diff
+    cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} FLUENTBIT_IMAGE_TAG={{image_tag}} ecspresso diff
 
 # Rollback a service
 rollback service:
