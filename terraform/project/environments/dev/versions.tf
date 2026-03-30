@@ -8,6 +8,7 @@ terraform {
     }
   }
 
+  # Prerequisites: S3 state bucket must have versioning enabled (required for use_lockfile).
   backend "s3" {
     bucket       = "o02c-terraform-management-tfstate-654654512164"
     key          = "myapp/dev/terraform.tfstate"

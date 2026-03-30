@@ -25,11 +25,12 @@ resource "aws_lb" "this" {
 # --------------------------------------------------------------------------------
 
 resource "aws_lb_target_group" "this" {
-  name        = "${var.project_name}-${var.environment}-${var.lane}"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = var.vpc_id
-  target_type = "ip"
+  name                 = "${var.project_name}-${var.environment}-${var.lane}"
+  port                 = 80
+  protocol             = "HTTP"
+  vpc_id               = var.vpc_id
+  target_type          = "ip"
+  deregistration_delay = 30
 
   health_check {
     path                = var.health_check_path

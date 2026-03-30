@@ -14,18 +14,18 @@
     {
       containerName: 'app',
       containerPort: 80,
-      targetGroupArn: "{{ tfstate `module.lb['admin'].aws_lb_target_group.this.arn` }}",
+      targetGroupArn: '{{ tfstate `output.target_group_arns["admin"]` }}',
     },
   ],
   networkConfiguration: {
     awsvpcConfiguration: {
       assignPublicIp: 'DISABLED',
       securityGroups: [
-        "{{ tfstate `module.network.aws_security_group.this['ecs'].id` }}",
+        '{{ tfstate `output.ecs_security_group_id` }}',
       ],
       subnets: [
-        "{{ tfstate `module.network.aws_subnet.private['ap-northeast-1a'].id` }}",
-        "{{ tfstate `module.network.aws_subnet.private['ap-northeast-1c'].id` }}",
+        '{{ tfstate `output.private_subnet_ids["ap-northeast-1a"]` }}',
+        '{{ tfstate `output.private_subnet_ids["ap-northeast-1c"]` }}',
       ],
     },
   },

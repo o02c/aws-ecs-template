@@ -27,6 +27,15 @@
           name: 'CLOUDFRONT_DOMAIN',
           value: 'admin.o2c.click',
         },
+        // Configure when CloudFront signed URLs are enabled
+        {
+          name: 'CLOUDFRONT_KEY_PAIR_ID',
+          value: '',
+        },
+        {
+          name: 'CLOUDFRONT_SIGNING_KEY_SECRET_ARN',
+          value: '',
+        },
       ],
       secrets: [],
     },

@@ -20,14 +20,19 @@ default:
 # --------------------------------------------------------------------------------
 
 # Full setup: shared → project → build → deploy
-setup: shared-apply project-apply build deploy
+setup: shared-apply-auto project-apply-auto build deploy
     @echo ""
     @echo "=== Setup Complete ==="
     @echo "User:  https://user.o2c.click/health"
     @echo "Admin: https://admin.o2c.click/health"
 
+# Confirm destructive operation
+_confirm-destroy:
+    @echo "This will destroy ALL infrastructure and data."
+    @read -p "Type 'destroy' to confirm: " confirm && [ "$$confirm" = "destroy" ] || { echo "Aborted."; exit 1; }
+
 # Full destroy: ECS → S3 → project → shared
-destroy: ecs-delete s3-empty project-destroy shared-destroy
+destroy: _confirm-destroy ecs-delete s3-empty project-destroy shared-destroy
     @echo ""
     @echo "=== Destroy Complete ==="
 
@@ -45,6 +50,10 @@ shared-plan: shared-init
 
 # Apply shared infrastructure
 shared-apply: shared-init
+    terraform -chdir=terraform/shared/environments/{{environment}} apply
+
+# Apply shared infrastructure (auto-approve)
+shared-apply-auto: shared-init
     terraform -chdir=terraform/shared/environments/{{environment}} apply -auto-approve
 
 # Destroy shared infrastructure
@@ -65,6 +74,10 @@ project-plan: project-init
 
 # Apply project infrastructure
 project-apply: project-init
+    terraform -chdir=terraform/project/environments/{{environment}} apply
+
+# Apply project infrastructure (auto-approve)
+project-apply-auto: project-init
     terraform -chdir=terraform/project/environments/{{environment}} apply -auto-approve
 
 # Destroy project infrastructure
@@ -88,7 +101,7 @@ build-one service:
     echo "--- Build: {{service}} ($TAG) ---"
     docker build --platform linux/amd64 -t "$IMAGE" "apps/{{service}}"
     docker push "$IMAGE"
-    sed -i '' "s/:v[0-9]*/:${TAG}/" "ecs/{{service}}/ecs-task-def.jsonnet"
+    sed -i.bak "s/:v[0-9]*/:${TAG}/" "ecs/{{service}}/ecs-task-def.jsonnet" && rm -f "ecs/{{service}}/ecs-task-def.jsonnet.bak"
     echo "Pushed $IMAGE"
 
 # Build and push all services
@@ -153,7 +166,7 @@ ecs-delete:
 s3-empty:
     #!/usr/bin/env bash
     set -euo pipefail
-    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text) || { echo "ERROR: Failed to get account ID"; exit 1; }
     for bucket in \
         "{{project_name}}-{{environment}}-user-assets" \
         "{{project_name}}-{{environment}}-admin-assets" \

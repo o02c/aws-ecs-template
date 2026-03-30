@@ -49,7 +49,10 @@ resource "aws_iam_role_policy" "codepipeline" {
           "codebuild:BatchGetBuilds",
           "codebuild:StartBuild"
         ]
-        Resource = "*"
+        Resource = flatten([
+          [for p in aws_codebuild_project.build : p.arn],
+          [for p in aws_codebuild_project.deploy : p.arn]
+        ])
       }
     ]
   })

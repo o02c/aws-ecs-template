@@ -12,7 +12,12 @@
 3. [第3章. AWSアカウントの払い出し](#第3章-awsアカウントの払い出し)  
 4. [第4章. AWSリソースの削除](#第4章-awsリソースの削除)  
 5. [第5章. 運用作業一覧](#第5章-運用作業一覧)  
-6. [第6章. 通知メッセージ](#第6章-通知メッセージ)  
+6. [第6章. 通知メッセージ](#第6章-通知メッセージ)
+7. [第7章. Accepted Risks / Design Decisions](#第7章-accepted-risks--design-decisions)
+   1. [7.1. SHA-1 in CloudFront Signed URLs (Sec1)](#71-sha-1-in-cloudfront-signed-urls-sec1)
+   2. [7.2. S3 Encryption: AES256 (SSE-S3) for logging and CI/CD buckets (Sec6)](#72-s3-encryption-aes256-sse-s3-for-logging-and-cicd-buckets-sec6)
+   3. [7.3. Inspector: ECR only, not ECS runtime (Sec9)](#73-inspector-ecr-only-not-ecs-runtime-sec9)
+   4. [7.4. DNS Firewall disabled (Sec11)](#74-dns-firewall-disabled-sec11)  
 
 ---
 
@@ -1306,3 +1311,84 @@ Athenaクエリエラー検知を行うためのイベントを以下に示す�
 対象ワークグループでのAthenaクエリエラーが検知された際に通知されるメールのサンプルを以下に示す。
 
 ![図6.6-1 Athenaクエリエラー検知時の通知メッセージサンプル](./images/figure-6-6-1.png)
+
+---
+
+# 第7章. Accepted Risks / Design Decisions
+
+本章では、セキュリティレビューにおいて検出された指摘事項のうち、AWS仕様上の制約やアーキテクチャ上の判断により意図的に対応しないこととした項目について、その根拠とリスク受容の判断を記載する。
+
+## 7.1. SHA-1 in CloudFront Signed URLs (Sec1)
+
+### 指摘内容
+
+CloudFront署名付きURLにおいてRSA-SHA1が使用されている。
+
+### 根拠
+
+CloudFront署名付きURLは、AWSの仕様としてRSA-SHA1による署名が必須である。代替のアルゴリズムは提供されていない。
+
+- [Amazon CloudFront Developer Guide - Creating a signed URL using a custom policy](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-creating-signed-url-custom-policy.html) -- "Sign the policy statement using RSA-SHA1"
+
+### リスク受容
+
+- **受容レベル**: Low
+- AWSプロトコル上の制約であり、利用者側で代替手段を選択することができない。AWS側の仕様変更を待つ以外に対応方法はない。
+
+---
+
+## 7.2. S3 Encryption: AES256 (SSE-S3) for logging and CI/CD buckets (Sec6)
+
+### 指摘内容
+
+ロギング用バケットおよびCI/CDアーティファクト用バケットにおいて、KMS (SSE-KMS) ではなくAES256 (SSE-S3) による暗号化が使用されている。
+
+### 根拠
+
+ALBアクセスログおよびCloudFront標準ログの配信先S3バケットは、AWSの仕様によりSSE-S3が必須または推奨されている。
+
+- [Elastic Load Balancing - Enable access logging](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html) -- "Amazon S3-managed encryption keys (SSE-S3)"
+- [Amazon CloudFront Developer Guide - Access Logs](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/AccessLogs.html) -- "SSE-S3 only"
+
+CI/CDアーティファクト用バケットについては、ロギングバケットとの一貫性の確保、およびCodePipelineアーティファクト暗号化固有の制約を考慮し、AES256 (SSE-S3) を採用している。
+
+### リスク受容
+
+- **受容レベル**: Low
+- SSE-S3による保存時暗号化は引き続き提供されている。カスタマーマネージドキーによる鍵ローテーション制御は利用できないが、AWSマネージドキーによる暗号化は有効である。
+
+---
+
+## 7.3. Inspector: ECR only, not ECS runtime (Sec9)
+
+### 指摘内容
+
+Amazon InspectorによるスキャンがECRコンテナイメージのみを対象としており、ECSランタイムスキャンが有効化されていない。
+
+### 根拠
+
+ECSランタイムスキャンはFireLensサイドカー構成と合わせて有効化する予定であり、issue [#5](https://github.com/o02c/aws-ecs-template/issues/5) にて追跡管理されている。
+
+### リスク受容
+
+- **受容レベル**: Medium
+- ランタイム脆弱性検出に一時的なギャップが存在する。ECRイメージスキャンによりデプロイ前の脆弱性検出は確保されているが、実行時の脆弱性検出はFireLens導入まで対応されない。
+
+---
+
+## 7.4. DNS Firewall disabled (Sec11)
+
+### 指摘内容
+
+Route 53 Resolver DNS Firewallが無効化（コメントアウト）されている。
+
+### 根拠
+
+本システムのVPCはプライベートサブネットのみで構成されており、インターネットへの直接のエグレスパスを持たない。ECSタスクはVPCエンドポイント経由でのみAWSサービスと通信しており、DNS exfiltrationのリスクは極めて限定的である。コスト対効果の観点から、現時点では無効化としている。
+
+NATゲートウェイ経由での外部APIアクセスが必要となった時点で再評価を行う。
+
+### リスク受容
+
+- **受容レベル**: Low
+- VPCエンドポイント経由の通信のみであり、DNS経由のデータ流出リスクは最小限に抑えられている。外部通信要件の追加時に再度有効化を検討する。

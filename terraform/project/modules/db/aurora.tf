@@ -20,6 +20,7 @@ resource "aws_rds_cluster" "this" {
   deletion_protection                 = var.deletion_protection
   skip_final_snapshot                 = var.skip_final_snapshot
   final_snapshot_identifier           = "${var.project_name}-${var.environment}-final"
+  backup_retention_period             = 7
 
   serverlessv2_scaling_configuration {
     min_capacity = var.serverless_min_capacity
@@ -57,6 +58,12 @@ resource "aws_rds_cluster_instance" "this" {
 resource "aws_rds_cluster_parameter_group" "this" {
   name   = "${var.project_name}-${var.environment}-cluster"
   family = "aurora-postgresql16"
+
+  parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
 
   tags = {
     Name = "${var.project_name}-${var.environment}-cluster"

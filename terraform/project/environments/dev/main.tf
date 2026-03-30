@@ -78,6 +78,9 @@ module "db" {
   master_username = var.db_master_username
   master_password = var.db_master_password
   kms_key_arn     = module.kms.key_arns["rds"]
+
+  deletion_protection = false
+  skip_final_snapshot = true
 }
 
 # --------------------------------------------------------------------------------

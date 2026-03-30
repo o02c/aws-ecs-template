@@ -39,13 +39,9 @@ resource "aws_s3_bucket_ownership_controls" "access_logs" {
 resource "aws_s3_bucket_public_access_block" "access_logs" {
   bucket = aws_s3_bucket.access_logs.id
 
-  # CloudFront standard logging requires ACL-based delivery (bucket-owner-full-control).
-  # block_public_acls must be false to allow this. Access is restricted via bucket policy.
-  block_public_acls       = false
+  block_public_acls       = true
   block_public_policy     = true
-  # CloudFront standard logging requires ACL-based delivery (bucket-owner-full-control).
-  # ignore_public_acls must be false to allow this. Access is restricted via bucket policy.
-  ignore_public_acls      = false
+  ignore_public_acls      = true
   restrict_public_buckets = true
 }
 

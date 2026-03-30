@@ -29,6 +29,8 @@ variable "enable_nat" {
   default     = true
 }
 
+# IMPORTANT: Set to true for production environments.
+# Single NAT Gateway (default) creates a single point of failure for all project VPC egress.
 variable "enable_ha_nat" {
   description = "Enable HA NAT Gateway (one per AZ). Set to false for single NAT (cost saving)"
   type        = bool

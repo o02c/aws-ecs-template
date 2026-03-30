@@ -76,13 +76,13 @@ variable "serverless_max_capacity" {
 variable "deletion_protection" {
   description = "Enable deletion protection"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "skip_final_snapshot" {
   description = "Skip final snapshot on deletion"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "db_iam_username" {
