@@ -13,3 +13,7 @@ variable "aws_account_id" {
   type        = string
 }
 
+variable "aws_region" {
+  description = "AWS region for service principal conditions"
+  type        = string
+}

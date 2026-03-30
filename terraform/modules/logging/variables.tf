@@ -8,8 +8,7 @@ variable "environment" {
   type        = string
 }
 
-variable "aws_account_id" {
-  description = "AWS account ID for key policies"
+variable "region" {
+  description = "AWS region (used for ELB account ID mapping)"
   type        = string
 }
-

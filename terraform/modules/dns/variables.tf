@@ -8,8 +8,7 @@ variable "environment" {
   type        = string
 }
 
-variable "aws_account_id" {
-  description = "AWS account ID for key policies"
+variable "domain_name" {
+  description = "Root domain name (e.g. o2c.click)"
   type        = string
 }
-
