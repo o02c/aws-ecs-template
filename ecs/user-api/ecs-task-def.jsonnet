@@ -1,19 +1,20 @@
 {
   containerDefinitions: [
-    // FireLens log router (Fluent Bit)
+    // FireLens log router (init-latest via ECR pull-through cache)
+    // ref: https://github.com/aws/aws-for-fluent-bit/blob/mainline/use_cases/init-process-for-fluent-bit/README.md
+    // ref: https://docs.aws.amazon.com/AmazonECR/latest/userguide/pull-through-cache.html
     {
       name: 'log_router',
-      image: "{{ tfstate `module.app.aws_ecr_repository.fluent_bit.repository_url` }}:{{ env `FLUENTBIT_IMAGE_TAG` `latest` }}",
+      image: "{{ tfstate `output.fluent_bit_init_image` }}",
       essential: true,
       firelensConfiguration: {
         type: 'fluentbit',
-        options: {
-          'config-file-type': 'file',
-          'config-file-value': '/fluent-bit/etc/extra.conf',
-        },
       },
       environment: [
-        { name: 'AWS_REGION', value: 'ap-northeast-1' },
+        // init process: S3 config + built-in parsers (auto-detected via -R flag)
+        { name: 'aws_fluent_bit_init_s3_1', value: "{{ tfstate `output.fluent_bit_config_s3_arn` }}" },
+        { name: 'aws_fluent_bit_init_file_1', value: '/fluent-bit/parsers/parsers.conf' },
+        // Fluent Bit config env vars (used in extra.conf)
         { name: 'LOG_GROUP', value: "{{ tfstate `module.app.aws_cloudwatch_log_group.this['user-api'].name` }}" },
         { name: 'FIREHOSE_STREAM', value: "{{ tfstate `module.app.aws_kinesis_firehose_delivery_stream.audit_logs.name` }}" },
       ],
@@ -94,7 +95,6 @@
           name: 'CLOUDFRONT_DOMAIN',
           value: 'user.o2c.click',
         },
-        // Configure when CloudFront signed URLs are enabled
         {
           name: 'CLOUDFRONT_KEY_PAIR_ID',
           value: '',

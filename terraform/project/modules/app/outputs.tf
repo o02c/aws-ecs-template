@@ -33,9 +33,14 @@ output "nginx_ecr_repository_url" {
   value       = aws_ecr_repository.nginx.repository_url
 }
 
-output "fluent_bit_ecr_repository_url" {
-  description = "Fluent Bit ECR repository URL"
-  value       = aws_ecr_repository.fluent_bit.repository_url
+output "fluent_bit_init_image" {
+  description = "Fluent Bit init-latest image URI (mirrored to private ECR)"
+  value       = "${aws_ecr_repository.fluent_bit.repository_url}:init-latest"
+}
+
+output "fluent_bit_config_s3_arn" {
+  description = "S3 ARN of Fluent Bit extra config for init process"
+  value       = "arn:aws:s3:::${aws_s3_bucket.audit_logs.id}/${aws_s3_object.fluent_bit_config.key}"
 }
 
 output "audit_log_bucket_id" {

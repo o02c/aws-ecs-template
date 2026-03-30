@@ -34,8 +34,8 @@ _confirm-destroy:
     @echo "This will destroy ALL infrastructure and data."
     @read -p "Type 'destroy' to confirm: " confirm && [ "$$confirm" = "destroy" ] || { echo "Aborted."; exit 1; }
 
-# Full destroy: ECS → S3 → project → shared
-destroy: _confirm-destroy ecs-delete s3-empty project-destroy shared-destroy
+# Full destroy: ECS → S3 → cache repos → project → shared
+destroy: _confirm-destroy ecs-delete s3-empty ecr-delete-cache project-destroy shared-destroy
     @echo ""
     @echo "=== Destroy Complete ==="
 
@@ -121,20 +121,23 @@ build-nginx: ecr-login
     docker push "$IMAGE"
     echo "Pushed $IMAGE"
 
-# Build and push Fluent Bit sidecar
-build-fluent-bit: ecr-login
+# Mirror aws-for-fluent-bit:init-latest to private ECR
+# (Fargate private subnets can't pull from public.ecr.aws directly)
+mirror-fluent-bit: ecr-login
     #!/usr/bin/env bash
     set -euo pipefail
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
     ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
-    IMAGE="${ECR_REGISTRY}/{{project_name}}-{{environment}}-fluent-bit:{{image_tag}}"
-    echo "--- Build: fluent-bit ({{image_tag}}) ---"
-    docker build --platform linux/amd64 -t "$IMAGE" "ecs/fluent-bit"
-    docker push "$IMAGE"
-    echo "Pushed $IMAGE"
+    SRC="public.ecr.aws/aws-observability/aws-for-fluent-bit:init-latest"
+    DST="${ECR_REGISTRY}/{{project_name}}-{{environment}}-fluent-bit:init-latest"
+    echo "--- Mirror: ${SRC} -> ${DST} ---"
+    docker pull --platform linux/amd64 "$SRC"
+    docker tag "$SRC" "$DST"
+    docker push "$DST"
+    echo "Mirrored to $DST"
 
-# Build and push all images (apps + nginx + fluent-bit), then save tag to .env
-build: build-nginx build-fluent-bit (build-one "user-api") (build-one "admin-api")
+# Build and push all images (apps + nginx), then save tag to .env
+build: build-nginx (build-one "user-api") (build-one "admin-api")
     #!/usr/bin/env bash
     set -euo pipefail
     if grep -q '^IMAGE_TAG=' .env 2>/dev/null; then
@@ -150,13 +153,13 @@ build: build-nginx build-fluent-bit (build-one "user-api") (build-one "admin-api
 
 # Deploy a single service (e.g., just deploy-one user-api)
 deploy-one service:
-    cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} FLUENTBIT_IMAGE_TAG={{image_tag}} ecspresso deploy
+    cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} ecspresso deploy
 
 # Deploy all services
 deploy: (deploy-one "user-api") (deploy-one "admin-api")
 
 # Build, push, and deploy a single service (full flow)
-ship service: build-nginx build-fluent-bit (build-one service) (deploy-one service)
+ship service: build-nginx (build-one service) (deploy-one service)
 
 # Build, push, and deploy all services
 ship-all: build deploy
@@ -171,14 +174,14 @@ verify-all: (verify "user-api") (verify "admin-api")
 # Render task/service definitions
 render service:
     @echo "--- Task Definition ---"
-    @cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} FLUENTBIT_IMAGE_TAG={{image_tag}} ecspresso render task-definition
+    @cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} ecspresso render task-definition
     @echo ""
     @echo "--- Service Definition ---"
     @cd ecs/{{service}} && ecspresso render service-definition
 
 # Show diff against running service
 diff service:
-    cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} FLUENTBIT_IMAGE_TAG={{image_tag}} ecspresso diff
+    cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} ecspresso diff
 
 # Rollback a service
 rollback service:
@@ -204,6 +207,18 @@ ecs-delete:
         echo "--- Deleting $service ---"
         (cd "ecs/$service" && ecspresso delete --force --terminate) || true
     done
+
+# Delete ECR pull-through cache repositories (auto-created, not Terraform-managed)
+ecr-delete-cache:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "--- Deleting ECR pull-through cache repositories ---"
+    repos=$(aws ecr describe-repositories --query 'repositories[?starts_with(repositoryName, `ecr-public/`)].repositoryName' --output text 2>/dev/null || true)
+    for repo in $repos; do
+        echo "  Deleting $repo"
+        aws ecr delete-repository --repository-name "$repo" --force 2>/dev/null || true
+    done
+    echo "  done"
 
 # Empty all S3 buckets (including versioned objects)
 s3-empty:

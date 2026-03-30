@@ -28,6 +28,27 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Pull-through cache requires additional ECR permissions on execution role
+# ref: https://docs.aws.amazon.com/AmazonECR/latest/userguide/pull-through-cache.html#pull-through-cache-iam
+resource "aws_iam_role_policy" "task_execution_pull_through_cache" {
+  name = "ecr-pull-through-cache"
+  role = aws_iam_role.task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:CreateRepository",
+          "ecr:BatchImportUpstreamImage"
+        ]
+        Resource = "arn:aws:ecr:*:${var.aws_account_id}:repository/${aws_ecr_pull_through_cache_rule.ecr_public.ecr_repository_prefix}/*"
+      }
+    ]
+  })
+}
+
 # --------------------------------------------------------------------------------
 # ECS Task Roles (per-service)
 # --------------------------------------------------------------------------------
@@ -97,6 +118,22 @@ resource "aws_iam_role_policy" "task_firelens" {
         Effect   = "Allow"
         Action   = "firehose:PutRecordBatch"
         Resource = aws_kinesis_firehose_delivery_stream.audit_logs.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          aws_s3_bucket.audit_logs.arn,
+          "${aws_s3_bucket.audit_logs.arn}/fluent-bit/*"
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = var.s3_kms_key_arn
       }
     ]
   })

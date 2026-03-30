@@ -52,10 +52,16 @@ output "nginx_ecr_repository_url" {
   value       = module.app.nginx_ecr_repository_url
 }
 
-output "fluent_bit_ecr_repository_url" {
-  description = "Fluent Bit ECR repository URL"
-  value       = module.app.fluent_bit_ecr_repository_url
+output "fluent_bit_init_image" {
+  description = "Fluent Bit init-latest image via pull-through cache"
+  value       = module.app.fluent_bit_init_image
 }
+
+output "fluent_bit_config_s3_arn" {
+  description = "S3 ARN of Fluent Bit extra config"
+  value       = module.app.fluent_bit_config_s3_arn
+}
+
 
 output "audit_log_bucket_id" {
   description = "Audit log S3 bucket ID"
