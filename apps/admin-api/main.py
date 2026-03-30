@@ -8,7 +8,9 @@ import boto3
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.hashes import SHA1
-from fastapi import FastAPI, UploadFile
+import re
+
+from fastapi import FastAPI, HTTPException, UploadFile
 
 # Configuration
 S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME", "")
@@ -47,7 +49,13 @@ app = FastAPI(title="Admin API", lifespan=lifespan)
 # --------------------------------------------------------------------------------
 
 
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+EXT_PATTERN = re.compile(r"^\.[a-zA-Z0-9]{1,10}$")
+
+
 def _build_cloudfront_signed_url(resource_path: str, ttl_seconds: int) -> str:
+    if _signing_key is None:
+        raise HTTPException(status_code=503, detail="Signing key not configured")
     expires = int((datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).timestamp())
     policy = (
         '{"Statement":[{"Resource":"'
@@ -108,7 +116,17 @@ def settings():
 @app.post("/api/files/upload")
 async def upload_file(file: UploadFile):
     file_id = uuid.uuid4().hex
-    content = await file.read()
+    chunks = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="File too large (max 10MB)")
+        chunks.append(chunk)
+    content = b"".join(chunks)
     s3_key = _upload_to_s3(file_id, file.filename or "upload", content)
     signed_url = _build_cloudfront_signed_url(s3_key, SIGNED_URL_TTL_SECONDS)
     return {
@@ -121,6 +139,8 @@ async def upload_file(file: UploadFile):
 
 @app.get("/api/files/{file_id}/url")
 def get_file_url(file_id: str, ext: str = ""):
+    if ext and not EXT_PATTERN.match(ext):
+        raise HTTPException(status_code=400, detail="Invalid file extension")
     s3_key = f"{S3_FILES_PREFIX}/{file_id}{ext}"
     signed_url = _build_cloudfront_signed_url(s3_key, SIGNED_URL_TTL_SECONDS)
     return {

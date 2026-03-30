@@ -9,24 +9,56 @@ CloudFront → Internal ALB → ECS Fargate / S3 (static assets)
 - ECS service deployment managed by ecspresso (not Terraform)
 - CI/CD: S3 push → EventBridge → CodePipeline → CodeBuild → ecspresso deploy
 
+### Multi-Project Architecture
+
+- Single AWS account, multiple projects each with its own VPC
+- Shared VPC provides egress (NAT Gateway) via Transit Gateway
+- IAM users managed in shared state
+- Project VPCs connect to shared VPC via TGW for internet access
+
+```
+[Project VPC] ----> [Transit Gateway] ----> [Shared VPC] ----> [NAT GW] ----> Internet
+```
+
 ## Directory Structure
 
 ```
 terraform/
-  environments/dev/    # main.tf lives here ONLY
-    main.tf, variables.tf, locals.tf, providers.tf, versions.tf
-    environment.auto.tfvars, secret.auto.tfvars.example
-  modules/
-    network/           # VPC, subnets, route tables, SG shells
-    db/                # Aurora PostgreSQL (Serverless v2)
-    lb/                # Internal ALB (per-lane)
-    storage/           # S3 + CloudFront OAC (per-lane)
-    app/               # ECS cluster, ECR, IAM, logging
-    cdn/               # CloudFront distribution (per-lane)
-    cicd/              # CodePipeline, CodeBuild
+  shared/                    # Shared infrastructure (1 per account)
+    modules/
+      network/               # Shared VPC, NAT GW, Transit Gateway
+      iam/                   # IAM users, groups, policies
+      kms/                   # Shared KMS keys
+    environments/
+      dev/                   # main.tf, locals.tf, variables.tf, etc.
+      prod/
+
+  project/                   # Project template (copy per project)
+    modules/
+      network/               # Project VPC, subnets, TGW attachment
+      db/                    # Aurora PostgreSQL (Serverless v2)
+      lb/                    # Internal ALB (per-lane)
+      storage/               # S3 + CloudFront OAC (per-lane)
+      app/                   # ECS cluster, ECR, IAM, logging
+      cdn/                   # CloudFront distribution (per-lane)
+      cicd/                  # CodePipeline, CodeBuild
+      dns/                   # Route53, ACM
+      dns_firewall/          # Route53 Resolver DNS Firewall
+      kms/                   # Project KMS keys
+      logging/               # Centralized logging
+    environments/
+      dev/                   # main.tf, locals.tf, variables.tf, etc.
+      prod/
+
 ecs/
-  <service-name>/      # ecspresso config per service
+  <service-name>/            # ecspresso config per service
 ```
+
+### State Management
+
+- Shared state: `shared/<env>/terraform.tfstate`
+- Project state: `<project-name>/<env>/terraform.tfstate`
+- Projects reference shared state via `terraform_remote_state`
 
 ## Naming Conventions
 
@@ -75,7 +107,14 @@ ecs/
 ## Development Workflow
 
 ```bash
-cd terraform/environments/dev
+# Shared infrastructure (deploy first)
+cd terraform/shared/environments/dev
+terraform init
+terraform plan
+terraform apply
+
+# Project infrastructure
+cd terraform/project/environments/dev
 terraform init
 terraform plan
 terraform apply

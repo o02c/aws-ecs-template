@@ -1,11 +1,11 @@
 region: ap-northeast-1
 cluster: myapp-dev
 service: user-api
-service_definition: ecs-service-def.json
-task_definition: ecs-task-def.json
+service_definition: ecs-service-def.jsonnet
+task_definition: ecs-task-def.jsonnet
 timeout: 10m0s
 
 plugins:
   - name: tfstate
     config:
-      path: ../../terraform/environments/dev/terraform.tfstate
+      url: s3://o02c-terraform-management-tfstate-654654512164/myapp/dev/terraform.tfstate
