@@ -63,6 +63,11 @@ output "fluent_bit_config_s3_arn" {
 }
 
 
+output "lane_domains" {
+  description = "Map of lane to FQDN"
+  value       = { for lane, _ in local.lanes : lane => "${lane}.${var.domain_name}" }
+}
+
 output "audit_log_bucket_id" {
   description = "Audit log S3 bucket ID"
   value       = module.app.audit_log_bucket_id

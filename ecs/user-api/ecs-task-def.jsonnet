@@ -88,12 +88,20 @@
       },
       environment: [
         {
+          name: 'DJANGO_SECRET_KEY',
+          value: 'dev-only-not-for-production',
+        },
+        {
+          name: 'ALLOWED_HOSTS',
+          value: "localhost,127.0.0.1,{{ tfstate `output.lane_domains['user']` }}",
+        },
+        {
           name: 'S3_BUCKET_NAME',
           value: "{{ tfstate `module.storage['user'].aws_s3_bucket.this.id` }}",
         },
         {
           name: 'CLOUDFRONT_DOMAIN',
-          value: 'user.o2c.click',
+          value: "{{ tfstate `output.lane_domains['user']` }}",
         },
         {
           name: 'CLOUDFRONT_KEY_PAIR_ID',

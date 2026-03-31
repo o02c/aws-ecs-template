@@ -11,6 +11,8 @@ environment := "dev"
 # Image tag: always use current git SHA
 image_tag := `git rev-parse --short HEAD`
 
+domain_name := env("DOMAIN_NAME", "example.com")
+
 export AWS_PROFILE := env("AWS_PROFILE", "terraform")
 export AWS_REGION := aws_region
 
@@ -26,8 +28,8 @@ default:
 setup: shared-apply-auto project-apply-auto build deploy
     @echo ""
     @echo "=== Setup Complete ==="
-    @echo "User:  https://user.o2c.click/health"
-    @echo "Admin: https://admin.o2c.click/health"
+    @echo "User:  https://user.{{domain_name}}/health"
+    @echo "Admin: https://admin.{{domain_name}}/health"
 
 # Confirm destructive operation
 _confirm-destroy:
@@ -123,6 +125,7 @@ build-nginx: ecr-login
 
 # Mirror aws-for-fluent-bit:init-latest to private ECR
 # (Fargate private subnets can't pull from public.ecr.aws directly)
+# fluent-bit ECR repo uses MUTABLE tags to allow init-latest overwrite.
 mirror-fluent-bit: ecr-login
     #!/usr/bin/env bash
     set -euo pipefail
@@ -243,9 +246,9 @@ s3-empty:
 # Check connectivity for all lanes
 check:
     @echo "--- user ---"
-    @curl -sf https://user.o2c.click/health && echo ""
+    @curl -sf https://user.{{domain_name}}/health && echo ""
     @echo "--- admin ---"
-    @curl -sf https://admin.o2c.click/health && echo ""
+    @curl -sf https://admin.{{domain_name}}/health && echo ""
 
 # Generate CloudFront signing keypair
 generate-signing-keypair:
