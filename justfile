@@ -63,7 +63,7 @@ shared-apply-auto: shared-init
 
 # Destroy shared infrastructure
 shared-destroy:
-    terraform -chdir=terraform/shared/environments/{{environment}} destroy
+    terraform -chdir=terraform/shared/environments/{{environment}} destroy -auto-approve
 
 # --------------------------------------------------------------------------------
 # Terraform - Project
@@ -87,7 +87,7 @@ project-apply-auto: project-init
 
 # Destroy project infrastructure
 project-destroy:
-    terraform -chdir=terraform/project/environments/{{environment}} destroy
+    terraform -chdir=terraform/project/environments/{{environment}} destroy -auto-approve
 
 # --------------------------------------------------------------------------------
 # Docker Build & Push
