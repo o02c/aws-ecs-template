@@ -46,3 +46,34 @@ output "ecs_cluster_name" {
   description = "ECS cluster name"
   value       = module.app.ecs_cluster_name
 }
+
+output "nginx_ecr_repository_url" {
+  description = "nginx ECR repository URL"
+  value       = module.app.nginx_ecr_repository_url
+}
+
+output "fluent_bit_init_image" {
+  description = "Fluent Bit init-latest image via pull-through cache"
+  value       = module.app.fluent_bit_init_image
+}
+
+output "fluent_bit_config_s3_arn" {
+  description = "S3 ARN of Fluent Bit extra config"
+  value       = module.app.fluent_bit_config_s3_arn
+}
+
+
+output "lane_domains" {
+  description = "Map of lane to FQDN"
+  value       = { for lane, _ in local.lanes : lane => "${lane}.${var.domain_name}" }
+}
+
+output "audit_log_bucket_id" {
+  description = "Audit log S3 bucket ID"
+  value       = module.app.audit_log_bucket_id
+}
+
+output "firehose_delivery_stream_name" {
+  description = "Firehose delivery stream name for audit logs"
+  value       = module.app.firehose_delivery_stream_name
+}

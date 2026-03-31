@@ -2,13 +2,18 @@
 # Usage: just <recipe> [args]
 
 set positional-arguments := true
+set dotenv-load := true
 
-aws_profile := "terraform"
 aws_region := "ap-northeast-1"
 project_name := "myapp"
 environment := "dev"
 
-export AWS_PROFILE := aws_profile
+# Image tag: always use current git SHA
+image_tag := `git rev-parse --short HEAD`
+
+domain_name := env("DOMAIN_NAME", "example.com")
+
+export AWS_PROFILE := env("AWS_PROFILE", "terraform")
 export AWS_REGION := aws_region
 
 # Show available recipes
@@ -23,16 +28,16 @@ default:
 setup: shared-apply-auto project-apply-auto build deploy
     @echo ""
     @echo "=== Setup Complete ==="
-    @echo "User:  https://user.o2c.click/health"
-    @echo "Admin: https://admin.o2c.click/health"
+    @echo "User:  https://user.{{domain_name}}/health"
+    @echo "Admin: https://admin.{{domain_name}}/health"
 
 # Confirm destructive operation
 _confirm-destroy:
     @echo "This will destroy ALL infrastructure and data."
     @read -p "Type 'destroy' to confirm: " confirm && [ "$$confirm" = "destroy" ] || { echo "Aborted."; exit 1; }
 
-# Full destroy: ECS → S3 → project → shared
-destroy: _confirm-destroy ecs-delete s3-empty project-destroy shared-destroy
+# Full destroy: ECS → S3 → cache repos → project → shared
+destroy: _confirm-destroy ecs-delete s3-empty ecr-delete-cache project-destroy shared-destroy
     @echo ""
     @echo "=== Destroy Complete ==="
 
@@ -88,24 +93,62 @@ project-destroy:
 # Docker Build & Push
 # --------------------------------------------------------------------------------
 
-# Build and push a single service (e.g., just build-one user-api)
-build-one service:
+# ECR login
+ecr-login:
+    aws ecr get-login-password --region {{aws_region}} | \
+        docker login --username AWS --password-stdin \
+        "$(aws sts get-caller-identity --query Account --output text).dkr.ecr.{{aws_region}}.amazonaws.com"
+
+# Build and push a single app service (e.g., just build-one user-api)
+build-one service: ecr-login
     #!/usr/bin/env bash
     set -euo pipefail
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
     ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
-    REPO="{{project_name}}-{{environment}}-{{service}}"
-    TAG="v$(date +%Y%m%d%H%M%S)"
-    IMAGE="${ECR_REGISTRY}/${REPO}:${TAG}"
-    aws ecr get-login-password --region {{aws_region}} | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-    echo "--- Build: {{service}} ($TAG) ---"
+    IMAGE="${ECR_REGISTRY}/{{project_name}}-{{environment}}-{{service}}:{{image_tag}}"
+    echo "--- Build: {{service}} ({{image_tag}}) ---"
     docker build --platform linux/amd64 -t "$IMAGE" "apps/{{service}}"
     docker push "$IMAGE"
-    sed -i.bak "s/:v[0-9]*/:${TAG}/" "ecs/{{service}}/ecs-task-def.jsonnet" && rm -f "ecs/{{service}}/ecs-task-def.jsonnet.bak"
     echo "Pushed $IMAGE"
 
-# Build and push all services
-build: (build-one "user-api") (build-one "admin-api")
+# Build and push nginx sidecar
+build-nginx: ecr-login
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
+    IMAGE="${ECR_REGISTRY}/{{project_name}}-{{environment}}-nginx:{{image_tag}}"
+    echo "--- Build: nginx ({{image_tag}}) ---"
+    docker build --platform linux/amd64 -t "$IMAGE" "ecs/nginx"
+    docker push "$IMAGE"
+    echo "Pushed $IMAGE"
+
+# Mirror aws-for-fluent-bit:init-latest to private ECR
+# (Fargate private subnets can't pull from public.ecr.aws directly)
+# fluent-bit ECR repo uses MUTABLE tags to allow init-latest overwrite.
+mirror-fluent-bit: ecr-login
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
+    SRC="public.ecr.aws/aws-observability/aws-for-fluent-bit:init-latest"
+    DST="${ECR_REGISTRY}/{{project_name}}-{{environment}}-fluent-bit:init-latest"
+    echo "--- Mirror: ${SRC} -> ${DST} ---"
+    docker pull --platform linux/amd64 "$SRC"
+    docker tag "$SRC" "$DST"
+    docker push "$DST"
+    echo "Mirrored to $DST"
+
+# Build and push all images (apps + nginx), then save tag to .env
+build: build-nginx (build-one "user-api") (build-one "admin-api")
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if grep -q '^IMAGE_TAG=' .env 2>/dev/null; then
+        sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG={{image_tag}}/" .env && rm -f .env.bak
+    else
+        echo "IMAGE_TAG={{image_tag}}" >> .env
+    fi
+    echo "IMAGE_TAG={{image_tag}} saved to .env"
 
 # --------------------------------------------------------------------------------
 # ecspresso
@@ -113,10 +156,16 @@ build: (build-one "user-api") (build-one "admin-api")
 
 # Deploy a single service (e.g., just deploy-one user-api)
 deploy-one service:
-    cd ecs/{{service}} && ecspresso deploy
+    cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} ecspresso deploy
 
 # Deploy all services
 deploy: (deploy-one "user-api") (deploy-one "admin-api")
+
+# Build, push, and deploy a single service (full flow)
+ship service: build-nginx (build-one service) (deploy-one service)
+
+# Build, push, and deploy all services
+ship-all: build deploy
 
 # Verify ecspresso config
 verify service:
@@ -128,14 +177,14 @@ verify-all: (verify "user-api") (verify "admin-api")
 # Render task/service definitions
 render service:
     @echo "--- Task Definition ---"
-    @cd ecs/{{service}} && ecspresso render task-definition
+    @cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} ecspresso render task-definition
     @echo ""
     @echo "--- Service Definition ---"
     @cd ecs/{{service}} && ecspresso render service-definition
 
 # Show diff against running service
 diff service:
-    cd ecs/{{service}} && ecspresso diff
+    cd ecs/{{service}} && IMAGE_TAG={{image_tag}} NGINX_IMAGE_TAG={{image_tag}} ecspresso diff
 
 # Rollback a service
 rollback service:
@@ -162,6 +211,18 @@ ecs-delete:
         (cd "ecs/$service" && ecspresso delete --force --terminate) || true
     done
 
+# Delete ECR pull-through cache repositories (auto-created, not Terraform-managed)
+ecr-delete-cache:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "--- Deleting ECR pull-through cache repositories ---"
+    repos=$(aws ecr describe-repositories --query 'repositories[?starts_with(repositoryName, `ecr-public/`)].repositoryName' --output text 2>/dev/null || true)
+    for repo in $repos; do
+        echo "  Deleting $repo"
+        aws ecr delete-repository --repository-name "$repo" --force 2>/dev/null || true
+    done
+    echo "  done"
+
 # Empty all S3 buckets (including versioned objects)
 s3-empty:
     #!/usr/bin/env bash
@@ -170,7 +231,8 @@ s3-empty:
     for bucket in \
         "{{project_name}}-{{environment}}-user-assets" \
         "{{project_name}}-{{environment}}-admin-assets" \
-        "{{project_name}}-{{environment}}-access-logs-${ACCOUNT_ID}"; do
+        "{{project_name}}-{{environment}}-access-logs-${ACCOUNT_ID}" \
+        "{{project_name}}-{{environment}}-audit-logs-${ACCOUNT_ID}"; do
         echo "--- Emptying $bucket ---"
         aws s3 rm "s3://$bucket" --recursive 2>/dev/null || true
         python3 scripts/empty-versioned-bucket.py "$bucket"
@@ -184,9 +246,9 @@ s3-empty:
 # Check connectivity for all lanes
 check:
     @echo "--- user ---"
-    @curl -sf https://user.o2c.click/health && echo ""
+    @curl -sf https://user.{{domain_name}}/health && echo ""
     @echo "--- admin ---"
-    @curl -sf https://admin.o2c.click/health && echo ""
+    @curl -sf https://admin.{{domain_name}}/health && echo ""
 
 # Generate CloudFront signing keypair
 generate-signing-keypair:

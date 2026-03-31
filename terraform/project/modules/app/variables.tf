@@ -100,3 +100,13 @@ variable "logs_kms_key_arn" {
   type        = string
   default     = ""
 }
+
+variable "aws_account_id" {
+  description = "AWS account ID for globally unique bucket naming"
+  type        = string
+}
+
+variable "s3_kms_key_arn" {
+  description = "KMS key ARN for S3 encryption (audit logs)"
+  type        = string
+}
