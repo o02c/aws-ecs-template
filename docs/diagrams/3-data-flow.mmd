@@ -1,0 +1,29 @@
+sequenceDiagram
+    participant User as Internet User
+    participant R53 as Route53
+    participant CF as CloudFront
+    participant WAF as WAFv2
+    participant ALB as Internal ALB
+    participant ECS as ECS Task
+    participant DB as Aurora PostgreSQL
+    participant S3 as S3 Assets
+
+    User->>R53: DNS解決 (lane.example.com)
+    R53-->>User: CloudFront Alias
+    User->>CF: HTTPS Request
+    CF->>WAF: リクエスト検査
+    WAF-->>CF: Allow/Block
+
+    alt API Request (default behavior)
+        CF->>ALB: VPC Origin (HTTPS:443)
+        ALB->>ECS: HTTP (container_port)
+        ECS->>DB: PostgreSQL (5432, IAM Auth)
+        DB-->>ECS: Response
+        ECS-->>ALB: Response
+        ALB-->>CF: Response
+    else Static Assets (/assets/*)
+        CF->>S3: OAC (SigV4)
+        S3-->>CF: Static Content
+    end
+
+    CF-->>User: Response

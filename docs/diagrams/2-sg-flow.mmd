@@ -1,0 +1,6 @@
+graph LR
+    CF_VPC_Origin["CloudFront<br/>VPC Origin"] -->|"HTTPS:443<br/>(Managed Prefix List)"| SG_ALB["SG: user-alb<br/>SG: admin-alb"]
+    SG_ALB -->|"container_port<br/>(egress)"| SG_ECS["SG: ecs"]
+    SG_ECS -->|"5432<br/>(egress)"| SG_DB["SG: db"]
+    SG_ECS -->|"443<br/>(egress)"| SG_VPCE["SG: vpce"]
+    SG_ECS -->|"443<br/>(egress, prefix list)"| S3_GW["S3 Gateway<br/>Endpoint"]
