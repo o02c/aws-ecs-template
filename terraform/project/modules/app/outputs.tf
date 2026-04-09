@@ -52,3 +52,8 @@ output "firehose_delivery_stream_name" {
   description = "Firehose delivery stream name for audit logs"
   value       = aws_kinesis_firehose_delivery_stream.audit_logs.name
 }
+
+output "ssm_parameter_arns" {
+  description = "Map of service to SSM parameter ARN for Django secret key"
+  value       = { for name, param in aws_ssm_parameter.django_secret_key : name => param.arn }
+}

@@ -88,10 +88,6 @@
       },
       environment: [
         {
-          name: 'DJANGO_SECRET_KEY',
-          value: 'dev-only-not-for-production',
-        },
-        {
           name: 'ALLOWED_HOSTS',
           value: "localhost,127.0.0.1,{{ tfstate `output.lane_domains['user']` }}",
         },
@@ -112,7 +108,12 @@
           value: '',
         },
       ],
-      secrets: [],
+      secrets: [
+        {
+          name: 'DJANGO_SECRET_KEY',
+          valueFrom: "{{ tfstate `module.app.aws_ssm_parameter.django_secret_key['user-api'].arn` }}",
+        },
+      ],
     },
   ],
   cpu: '512',
