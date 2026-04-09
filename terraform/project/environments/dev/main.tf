@@ -135,7 +135,7 @@ module "app" {
     for lane in keys(local.lanes) : lane => module.network.security_group_ids["${lane}-alb"]
   }
   db_security_group_id = module.network.security_group_ids["db"]
-  shared_vpc_cidr      = data.terraform_remote_state.shared.outputs.shared_vpc_cidr
+  shared_private_subnet_cidrs = data.terraform_remote_state.shared.outputs.shared_private_subnet_cidrs
   s3_prefix_list_id    = module.network.s3_prefix_list_id
   db_cluster_arn         = module.db.cluster_arn
   db_resource_id         = module.db.cluster_resource_id

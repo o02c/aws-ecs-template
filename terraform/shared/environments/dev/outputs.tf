@@ -17,6 +17,11 @@ output "shared_vpc_cidr" {
   value       = module.network.vpc_cidr
 }
 
+output "shared_private_subnet_cidrs" {
+  description = "Shared VPC private subnet CIDRs (where VPC endpoints are deployed)"
+  value       = module.network.private_subnet_cidrs
+}
+
 output "endpoint_phz_zone_ids" {
   description = "Map of endpoint identifier to Route53 PHZ zone ID"
   value       = module.network.endpoint_phz_zone_ids

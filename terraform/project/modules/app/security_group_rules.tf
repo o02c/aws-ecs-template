@@ -33,7 +33,7 @@ resource "aws_security_group_rule" "ecs_to_vpce" {
   to_port           = 443
   protocol          = "tcp"
   security_group_id = var.ecs_security_group_id
-  cidr_blocks       = [var.shared_vpc_cidr]
+  cidr_blocks       = var.shared_private_subnet_cidrs
   description       = "HTTPS to shared VPC endpoints via TGW"
 }
 

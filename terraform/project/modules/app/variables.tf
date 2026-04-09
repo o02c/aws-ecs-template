@@ -33,9 +33,9 @@ variable "db_security_group_id" {
   type        = string
 }
 
-variable "shared_vpc_cidr" {
-  description = "Shared VPC CIDR block for egress to VPC endpoints via TGW"
-  type        = string
+variable "shared_private_subnet_cidrs" {
+  description = "Shared VPC private subnet CIDRs where VPC endpoints are deployed"
+  type        = list(string)
 }
 
 variable "db_cluster_arn" {

@@ -18,6 +18,11 @@ output "private_subnet_ids" {
   value       = { for az, subnet in aws_subnet.private : az => subnet.id }
 }
 
+output "private_subnet_cidrs" {
+  description = "List of private subnet CIDRs"
+  value       = [for subnet in aws_subnet.private : subnet.cidr_block]
+}
+
 output "transit_gateway_id" {
   description = "Transit Gateway ID"
   value       = aws_ec2_transit_gateway.this.id
