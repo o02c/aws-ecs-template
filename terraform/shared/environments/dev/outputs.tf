@@ -16,8 +16,3 @@ output "shared_vpc_cidr" {
   description = "Shared VPC CIDR block"
   value       = module.network.vpc_cidr
 }
-
-output "nat_gateway_public_ips" {
-  description = "NAT Gateway public IPs"
-  value       = module.network.nat_gateway_public_ips
-}
