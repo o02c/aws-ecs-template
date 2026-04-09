@@ -110,3 +110,8 @@ variable "s3_kms_key_arn" {
   description = "KMS key ARN for S3 encryption (audit logs)"
   type        = string
 }
+
+variable "log_bucket_id" {
+  description = "S3 bucket ID for server access logging"
+  type        = string
+}

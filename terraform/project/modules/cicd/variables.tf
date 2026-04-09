@@ -29,3 +29,13 @@ variable "ecs_task_role_arns" {
   description = "Map of service to ECS task role ARN"
   type        = map(string)
 }
+
+variable "log_bucket_id" {
+  description = "S3 bucket ID for server access logging"
+  type        = string
+}
+
+variable "kms_key_arn" {
+  description = "KMS key ARN for S3 bucket encryption"
+  type        = string
+}
