@@ -63,7 +63,12 @@ resource "aws_iam_role_policy" "task_execution_ssm" {
           "ssm:GetParameters",
           "ssm:GetParameter"
         ]
-        Resource = "arn:aws:ssm:*:${var.aws_account_id}:parameter/${var.project_name}/${var.environment}/*"
+        Resource = [for name, param in aws_ssm_parameter.django_secret_key : param.arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = var.logs_kms_key_arn
       }
     ]
   })

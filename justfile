@@ -24,22 +24,18 @@ default:
 # Setup / Destroy
 # --------------------------------------------------------------------------------
 
-# Full setup: shared → project → build → deploy
-setup: shared-apply-auto project-apply-auto build deploy
-    @echo ""
-    @echo "=== Setup Complete ==="
-    @echo "User:  https://user.{{domain_name}}/health"
-    @echo "Admin: https://admin.{{domain_name}}/health"
+# Full setup: shared → project → secrets → build → deploy → health check
+setup:
+    DOMAIN_NAME={{domain_name}} bash scripts/full-deploy.sh
 
 # Confirm destructive operation
 _confirm-destroy:
     @echo "This will destroy ALL infrastructure and data."
     @read -p "Type 'destroy' to confirm: " confirm && [ "$$confirm" = "destroy" ] || { echo "Aborted."; exit 1; }
 
-# Full destroy: ECS → S3 → cache repos → project → shared
-destroy: _confirm-destroy ecs-delete s3-empty ecr-delete-cache project-destroy shared-destroy
-    @echo ""
-    @echo "=== Destroy Complete ==="
+# Full destroy: ECS → S3 → cache repos → project → shared → log cleanup
+destroy: _confirm-destroy
+    bash scripts/full-destroy.sh
 
 # --------------------------------------------------------------------------------
 # Terraform - Shared

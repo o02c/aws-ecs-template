@@ -101,18 +101,27 @@ done
 # --------------------------------------------------------------------------------
 echo ""
 echo "--- [6/6] Health Check ---"
-DOMAIN=$(terraform -chdir=terraform/project/environments/${ENVIRONMENT} output -raw lane_domains 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('user',''))" 2>/dev/null || echo "")
-if [ -n "${DOMAIN}" ]; then
+DOMAIN_NAME="${DOMAIN_NAME:-o2c.click}"
+HEALTH_FAILED=0
+if [ -n "${DOMAIN_NAME}" ]; then
   echo "  Waiting 30s for services to stabilize..."
   sleep 30
   for lane in user admin; do
-    URL="https://${lane}.$(terraform -chdir=terraform/project/environments/${ENVIRONMENT} output -json lane_domains | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('${lane}','').split('.', 1)[1] if '.' in d.get('${lane}','') else '')")/health"
-    echo -n "  ${lane}: "
-    curl -sf "https://${lane}.o2c.click/health" && echo " OK" || echo " FAILED"
+    URL="https://${lane}.${DOMAIN_NAME}/health"
+    echo -n "  ${lane}: ${URL} → "
+    if curl -sf --max-time 10 "${URL}"; then
+      echo " OK"
+    else
+      echo " FAILED"
+      HEALTH_FAILED=1
+    fi
   done
 fi
 
 echo ""
-echo "=== Deploy Complete ==="
-echo "User:  https://user.o2c.click/health"
-echo "Admin: https://admin.o2c.click/health"
+if [ "${HEALTH_FAILED}" -eq 1 ]; then
+  echo "=== Deploy Complete (with health check failures) ==="
+  exit 1
+else
+  echo "=== Deploy Complete ==="
+fi

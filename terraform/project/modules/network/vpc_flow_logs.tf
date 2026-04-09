@@ -65,7 +65,10 @@ data "aws_iam_policy_document" "flow_log" {
       "logs:DescribeLogStreams",
     ]
 
-    resources = ["*"]
+    resources = [
+      aws_cloudwatch_log_group.flow_log.arn,
+      "${aws_cloudwatch_log_group.flow_log.arn}:*"
+    ]
   }
 }
 
