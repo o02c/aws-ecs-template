@@ -49,6 +49,31 @@ resource "aws_iam_role_policy" "task_execution_pull_through_cache" {
   })
 }
 
+# SSM Parameter Store access for ECS task execution role (secrets injection)
+resource "aws_iam_role_policy" "task_execution_ssm" {
+  name = "ssm-parameter-access"
+  role = aws_iam_role.task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameters",
+          "ssm:GetParameter"
+        ]
+        Resource = [for name, param in aws_ssm_parameter.django_secret_key : param.arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = var.logs_kms_key_arn
+      }
+    ]
+  })
+}
+
 # --------------------------------------------------------------------------------
 # ECS Task Roles (per-service)
 # --------------------------------------------------------------------------------

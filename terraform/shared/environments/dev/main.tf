@@ -14,10 +14,11 @@ module "kms" {
   project_name   = var.project_name
   environment    = var.environment
   aws_account_id = data.aws_caller_identity.current.account_id
+  aws_region     = local.aws_region
 }
 
 # --------------------------------------------------------------------------------
-# Network (Shared VPC with NAT Gateway + Transit Gateway)
+# Network (Shared VPC with Transit Gateway)
 # --------------------------------------------------------------------------------
 
 module "network" {
@@ -28,10 +29,9 @@ module "network" {
   vpc_cidr          = local.vpc_cidr
   public_subnets    = local.public_subnets
   private_subnets   = local.private_subnets
-  enable_nat        = false
-  enable_ha_nat     = false
   project_vpc_cidrs = local.project_vpc_cidrs
   gateway_endpoints = local.gateway_endpoints
+  kms_key_arn       = module.kms.key_arns["logs"]
 }
 
 # --------------------------------------------------------------------------------

@@ -110,3 +110,29 @@ NATゲートウェイ経由での外部APIアクセスが必要となった時�
 
 - **受容レベル**: Low
 - VPCエンドポイント経由の通信のみであり、DNS経由のデータ流出リスクは最小限に抑えられている。外部通信要件の追加時に再度有効化を検討する。
+
+---
+
+## 5. シークレット管理に SSM Parameter Store を使用
+
+### 関連ガイド条項
+
+- **2.2.33. AWS Secrets Manager > 2) 手動運用で統制を行う禁止行為**
+  - 「Secrets Managerを用いずにパスワード等のシークレットを管理することの禁止」
+
+### 指摘内容
+
+パスワード等のシークレット管理に Secrets Manager ではなく SSM Parameter Store (SecureString) を使用している。
+
+### 根拠
+
+- 自動ローテーションが不要なユースケースであり、Secrets Manager のローテーション機能を必要としない
+- SSM Parameter Store SecureString は KMS カスタマーマネージドキーで暗号化され、保存時・転送時の暗号化は Secrets Manager と同等
+- ECS タスク定義からの参照方式も Secrets Manager と同様に `valueFrom` で対応可能
+- コスト面で Parameter Store が有利（Standard パラメータは無料）
+
+### リスク受容
+
+- **受容レベル**: Low
+- セキュリティ上の実質的な差異はない。ガイドライン条項の趣旨（平文でのシークレット管理禁止、一元管理の実現）は Parameter Store でも満たされる。
+- **対応:** 標準環境管理者に事前確認の上、承認を得ること

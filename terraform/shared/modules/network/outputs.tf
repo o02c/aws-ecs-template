@@ -28,7 +28,3 @@ output "transit_gateway_route_table_id" {
   value       = aws_ec2_transit_gateway.this.association_default_route_table_id
 }
 
-output "nat_gateway_public_ips" {
-  description = "NAT Gateway public IPs"
-  value       = var.enable_nat ? { for az, eip in aws_eip.nat : az => eip.public_ip } : {}
-}

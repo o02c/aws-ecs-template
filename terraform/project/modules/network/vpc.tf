@@ -13,7 +13,9 @@ resource "aws_vpc" "this" {
 }
 
 # --------------------------------------------------------------------------------
-# Internet Gateway (required for CloudFront VPC origins)
+# Internet Gateway
+# Required by CloudFront VPC Origins (logical marker, not used for routing)
+# ref: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html
 # --------------------------------------------------------------------------------
 
 resource "aws_internet_gateway" "this" {

@@ -1,4 +1,41 @@
 # --------------------------------------------------------------------------------
+# Data Sources
+# --------------------------------------------------------------------------------
+
+data "aws_caller_identity" "current" {}
+
+# --------------------------------------------------------------------------------
+# VPC Endpoint Policy
+# --------------------------------------------------------------------------------
+
+locals {
+  vpc_endpoint_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowAll"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "DenyOtherAwsAccountPrincipals"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "*"
+        Resource  = "*"
+        Condition = {
+          StringNotEquals = {
+            "aws:PrincipalAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+}
+
+# --------------------------------------------------------------------------------
 # VPC Endpoints (Interface)
 # --------------------------------------------------------------------------------
 
@@ -11,7 +48,6 @@ resource "aws_vpc_endpoint" "interface" {
   private_dns_enabled = true
   subnet_ids          = [for s in aws_subnet.private : s.id]
   security_group_ids  = [aws_security_group.this["vpce"].id]
-
   tags = {
     Name = "${var.project_name}-${var.environment}-${each.key}"
   }
@@ -21,6 +57,8 @@ resource "aws_vpc_endpoint" "interface" {
 # VPC Endpoints (Gateway)
 # --------------------------------------------------------------------------------
 
+# Gateway endpoints (S3) do not support aws:PrincipalAccount condition
+# for ECR internal layer access. Use default full-access policy.
 resource "aws_vpc_endpoint" "gateway" {
   for_each = var.gateway_endpoints
 

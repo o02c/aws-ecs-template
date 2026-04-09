@@ -34,11 +34,6 @@ variable "master_username" {
   sensitive   = true
 }
 
-variable "master_password" {
-  description = "Master password for Aurora cluster"
-  type        = string
-  sensitive   = true
-}
 
 variable "kms_key_arn" {
   description = "KMS key ARN for Aurora storage encryption"

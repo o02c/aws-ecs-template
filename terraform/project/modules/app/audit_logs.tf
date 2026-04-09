@@ -39,6 +39,13 @@ resource "aws_s3_bucket_public_access_block" "audit_logs" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_logging" "audit_logs" {
+  bucket = aws_s3_bucket.audit_logs.id
+
+  target_bucket = var.log_bucket_id
+  target_prefix = "audit-logs/"
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "audit_logs" {
   bucket = aws_s3_bucket.audit_logs.id
 

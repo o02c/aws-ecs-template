@@ -59,6 +59,7 @@ module "network" {
   interface_endpoints = local.interface_endpoints
   gateway_endpoints   = local.gateway_endpoints
   transit_gateway_id  = local.transit_gateway_id
+  kms_key_arn         = module.kms.key_arns["logs"]
 }
 
 # --------------------------------------------------------------------------------
@@ -76,7 +77,6 @@ module "db" {
   ecs_security_group_id = module.network.security_group_ids["ecs"]
 
   master_username = var.db_master_username
-  master_password = var.db_master_password
   kms_key_arn     = module.kms.key_arns["rds"]
 
   deletion_protection = false
@@ -151,6 +151,7 @@ module "app" {
   logs_kms_key_arn                  = module.kms.key_arns["logs"]
   aws_account_id                    = data.aws_caller_identity.current.account_id
   s3_kms_key_arn                    = module.kms.key_arns["s3"]
+  log_bucket_id                     = module.logging.bucket_id
 }
 
 # --------------------------------------------------------------------------------
@@ -160,6 +161,11 @@ module "app" {
 module "cdn" {
   source   = "../../modules/cdn"
   for_each = local.lanes
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 
   project_name                   = var.project_name
   environment                    = var.environment
@@ -220,4 +226,6 @@ module "dns" {
 #   ecr_repository_urls = module.app.ecr_repository_urls
 #   services            = local.services
 #   ecs_task_role_arns  = module.app.task_role_arns
+#   log_bucket_id       = module.logging.bucket_id
+#   kms_key_arn         = module.kms.key_arns["s3"]
 # }

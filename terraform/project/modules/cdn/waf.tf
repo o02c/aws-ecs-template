@@ -122,3 +122,28 @@ resource "aws_wafv2_web_acl" "this" {
     Name = "${var.project_name}-${var.environment}-${var.lane}"
   }
 }
+
+# --------------------------------------------------------------------------------
+# WAF Logging (CloudWatch Logs in us-east-1)
+# --------------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_group" "waf" {
+  provider = aws.us_east_1
+
+  name              = "aws-waf-logs-${var.project_name}-${var.environment}-${var.lane}"
+  retention_in_days = 30
+
+  # NOTE: KMS encryption is not configured because no us-east-1 KMS key exists.
+  # To enable, create a KMS key in us-east-1 and set kms_key_id here.
+
+  tags = {
+    Name = "aws-waf-logs-${var.project_name}-${var.environment}-${var.lane}"
+  }
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "this" {
+  provider = aws.us_east_1
+
+  log_destination_configs = [aws_cloudwatch_log_group.waf.arn]
+  resource_arn            = aws_wafv2_web_acl.this.arn
+}

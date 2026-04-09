@@ -156,6 +156,21 @@ resource "aws_s3_bucket_policy" "access_logs" {
         }
         Action   = "s3:GetBucketAcl"
         Resource = aws_s3_bucket.access_logs.arn
+      },
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.access_logs.arn,
+          "${aws_s3_bucket.access_logs.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
       }
     ]
   })

@@ -12,14 +12,3 @@ resource "aws_vpc" "this" {
   }
 }
 
-# --------------------------------------------------------------------------------
-# Internet Gateway
-# --------------------------------------------------------------------------------
-
-resource "aws_internet_gateway" "this" {
-  vpc_id = aws_vpc.this.id
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-shared-igw"
-  }
-}
