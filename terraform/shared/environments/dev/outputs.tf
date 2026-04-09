@@ -16,3 +16,8 @@ output "shared_vpc_cidr" {
   description = "Shared VPC CIDR block"
   value       = module.network.vpc_cidr
 }
+
+output "endpoint_phz_zone_ids" {
+  description = "Map of endpoint identifier to Route53 PHZ zone ID"
+  value       = module.network.endpoint_phz_zone_ids
+}

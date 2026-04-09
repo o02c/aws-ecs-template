@@ -35,6 +35,12 @@ variable "gateway_endpoints" {
   default     = {}
 }
 
+variable "interface_endpoints" {
+  description = "Map of identifier to service name for Interface VPC endpoints"
+  type        = map(string)
+  default     = {}
+}
+
 variable "kms_key_arn" {
   description = "KMS key ARN for CloudWatch Logs encryption"
   type        = string

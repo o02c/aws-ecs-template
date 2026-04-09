@@ -33,8 +33,8 @@ variable "db_security_group_id" {
   type        = string
 }
 
-variable "vpce_security_group_id" {
-  description = "Security group ID for VPC endpoints"
+variable "shared_vpc_cidr" {
+  description = "Shared VPC CIDR block for egress to VPC endpoints via TGW"
   type        = string
 }
 

@@ -26,26 +26,15 @@ resource "aws_security_group_rule" "ecs_to_db" {
   description              = "To Aurora PostgreSQL"
 }
 
-# Allow outbound HTTPS to VPC endpoints
+# Allow outbound HTTPS to shared VPC endpoints (via Transit Gateway)
 resource "aws_security_group_rule" "ecs_to_vpce" {
-  type                     = "egress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = var.ecs_security_group_id
-  source_security_group_id = var.vpce_security_group_id
-  description              = "HTTPS to VPC endpoints"
-}
-
-# Allow inbound HTTPS from ECS tasks to VPC endpoints
-resource "aws_security_group_rule" "vpce_from_ecs" {
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = var.vpce_security_group_id
-  source_security_group_id = var.ecs_security_group_id
-  description              = "HTTPS from ECS tasks"
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = var.ecs_security_group_id
+  cidr_blocks       = [var.shared_vpc_cidr]
+  description       = "HTTPS to shared VPC endpoints via TGW"
 }
 
 # Allow outbound HTTPS to S3 (via gateway endpoint, needed for ECR image layer download)

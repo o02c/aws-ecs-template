@@ -51,15 +51,15 @@ module "logging" {
 module "network" {
   source = "../../modules/network"
 
-  project_name        = var.project_name
-  environment         = var.environment
-  vpc_cidr            = local.vpc_cidr
-  private_subnets     = local.private_subnets
-  security_groups     = local.security_groups
-  interface_endpoints = local.interface_endpoints
-  gateway_endpoints   = local.gateway_endpoints
-  transit_gateway_id  = local.transit_gateway_id
-  kms_key_arn         = module.kms.key_arns["logs"]
+  project_name                 = var.project_name
+  environment                  = var.environment
+  vpc_cidr                     = local.vpc_cidr
+  private_subnets              = local.private_subnets
+  security_groups              = local.security_groups
+  gateway_endpoints            = local.gateway_endpoints
+  shared_endpoint_phz_zone_ids = data.terraform_remote_state.shared.outputs.endpoint_phz_zone_ids
+  transit_gateway_id           = local.transit_gateway_id
+  kms_key_arn                  = module.kms.key_arns["logs"]
 }
 
 # --------------------------------------------------------------------------------
@@ -134,9 +134,9 @@ module "app" {
   alb_security_group_ids = {
     for lane in keys(local.lanes) : lane => module.network.security_group_ids["${lane}-alb"]
   }
-  db_security_group_id   = module.network.security_group_ids["db"]
-  vpce_security_group_id = module.network.security_group_ids["vpce"]
-  s3_prefix_list_id      = module.network.s3_prefix_list_id
+  db_security_group_id = module.network.security_group_ids["db"]
+  shared_vpc_cidr      = data.terraform_remote_state.shared.outputs.shared_vpc_cidr
+  s3_prefix_list_id    = module.network.s3_prefix_list_id
   db_cluster_arn         = module.db.cluster_arn
   db_resource_id         = module.db.cluster_resource_id
   services               = local.services
