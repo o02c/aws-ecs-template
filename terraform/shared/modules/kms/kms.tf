@@ -8,6 +8,10 @@ locals {
       description = "CMK for shared infrastructure encryption"
       service     = null
     }
+    logs = {
+      description = "CMK for CloudWatch Logs encryption"
+      service     = "logs.${var.aws_region}.amazonaws.com"
+    }
   }
 }
 
@@ -49,5 +53,35 @@ data "aws_iam_policy_document" "key" {
 
     actions   = ["kms:*"]
     resources = ["*"]
+  }
+
+  # Allow service principal access (only for keys that need it)
+  dynamic "statement" {
+    for_each = each.value.service != null ? { service = each.value.service } : {}
+
+    content {
+      sid    = "AllowServicePrincipal"
+      effect = "Allow"
+
+      principals {
+        type        = "Service"
+        identifiers = [statement.value]
+      }
+
+      actions = [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:ReEncrypt*",
+        "kms:GenerateDataKey*",
+        "kms:DescribeKey",
+      ]
+      resources = ["*"]
+
+      condition {
+        test     = "ArnLike"
+        variable = "kms:EncryptionContext:aws:logs:arn"
+        values   = ["arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:*"]
+      }
+    }
   }
 }

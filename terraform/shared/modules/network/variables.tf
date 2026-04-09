@@ -23,20 +23,6 @@ variable "private_subnets" {
   type        = map(string)
 }
 
-variable "enable_nat" {
-  description = "Enable NAT Gateway for internet egress"
-  type        = bool
-  default     = true
-}
-
-# IMPORTANT: Set to true for production environments.
-# Single NAT Gateway (default) creates a single point of failure for all project VPC egress.
-variable "enable_ha_nat" {
-  description = "Enable HA NAT Gateway (one per AZ). Set to false for single NAT (cost saving)"
-  type        = bool
-  default     = false
-}
-
 variable "project_vpc_cidrs" {
   description = "Map of project name to VPC CIDR for return routes via TGW"
   type        = map(string)
@@ -47,4 +33,9 @@ variable "gateway_endpoints" {
   description = "Map of identifier to service name for Gateway VPC endpoints"
   type        = map(string)
   default     = {}
+}
+
+variable "kms_key_arn" {
+  description = "KMS key ARN for CloudWatch Logs encryption"
+  type        = string
 }

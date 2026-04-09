@@ -38,3 +38,8 @@ variable "transit_gateway_id" {
   type        = string
   default     = ""
 }
+
+variable "kms_key_arn" {
+  description = "KMS key ARN for CloudWatch Logs encryption"
+  type        = string
+}
