@@ -1,59 +1,4 @@
 # --------------------------------------------------------------------------------
-# Data Sources
-# --------------------------------------------------------------------------------
-
-data "aws_caller_identity" "current" {}
-
-# --------------------------------------------------------------------------------
-# VPC Endpoint Policy
-# --------------------------------------------------------------------------------
-
-locals {
-  vpc_endpoint_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "AllowAll"
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "*"
-        Resource  = "*"
-      },
-      {
-        Sid       = "DenyOtherAwsAccountPrincipals"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "*"
-        Resource  = "*"
-        Condition = {
-          StringNotEquals = {
-            "aws:PrincipalAccount" = data.aws_caller_identity.current.account_id
-          }
-        }
-      }
-    ]
-  })
-}
-
-# --------------------------------------------------------------------------------
-# VPC Endpoints (Interface)
-# --------------------------------------------------------------------------------
-
-resource "aws_vpc_endpoint" "interface" {
-  for_each = var.interface_endpoints
-
-  vpc_id              = aws_vpc.this.id
-  service_name        = each.value
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-  subnet_ids          = [for s in aws_subnet.private : s.id]
-  security_group_ids  = [aws_security_group.this["vpce"].id]
-  tags = {
-    Name = "${var.project_name}-${var.environment}-${each.key}"
-  }
-}
-
-# --------------------------------------------------------------------------------
 # VPC Endpoints (Gateway)
 # --------------------------------------------------------------------------------
 
@@ -70,4 +15,15 @@ resource "aws_vpc_endpoint" "gateway" {
   tags = {
     Name = "${var.project_name}-${var.environment}-${each.key}"
   }
+}
+
+# --------------------------------------------------------------------------------
+# Route53 PHZ Association (shared VPC endpoints)
+# --------------------------------------------------------------------------------
+
+resource "aws_route53_zone_association" "shared_endpoints" {
+  for_each = var.shared_endpoint_phz_zone_ids
+
+  zone_id = each.value
+  vpc_id  = aws_vpc.this.id
 }

@@ -23,11 +23,6 @@ variable "security_groups" {
   type        = set(string)
 }
 
-variable "interface_endpoints" {
-  description = "Map of identifier to service name for Interface VPC endpoints"
-  type        = map(string)
-}
-
 variable "gateway_endpoints" {
   description = "Map of identifier to service name for Gateway VPC endpoints"
   type        = map(string)
@@ -37,6 +32,12 @@ variable "transit_gateway_id" {
   description = "Transit Gateway ID for shared VPC connectivity. Empty string to disable."
   type        = string
   default     = ""
+}
+
+variable "shared_endpoint_phz_zone_ids" {
+  description = "Map of endpoint name to Route53 PHZ zone ID from shared VPC"
+  type        = map(string)
+  default     = {}
 }
 
 variable "kms_key_arn" {

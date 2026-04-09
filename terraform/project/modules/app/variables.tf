@@ -33,9 +33,9 @@ variable "db_security_group_id" {
   type        = string
 }
 
-variable "vpce_security_group_id" {
-  description = "Security group ID for VPC endpoints"
-  type        = string
+variable "shared_private_subnet_cidrs" {
+  description = "Shared VPC private subnet CIDRs where VPC endpoints are deployed"
+  type        = list(string)
 }
 
 variable "db_cluster_arn" {

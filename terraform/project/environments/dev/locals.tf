@@ -20,20 +20,9 @@ locals {
   }
 
   security_groups = toset(concat(
-    ["ecs", "db", "vpce"],
+    ["ecs", "db"],
     [for lane in keys(local.lanes) : "${lane}-alb"]
   ))
-
-  # Interface endpoints for ECS task access to AWS services
-  interface_endpoints = {
-    ecr-api        = "com.amazonaws.${local.aws_region}.ecr.api"
-    ecr-dkr        = "com.amazonaws.${local.aws_region}.ecr.dkr"
-    logs           = "com.amazonaws.${local.aws_region}.logs"
-    firehose       = "com.amazonaws.${local.aws_region}.kinesis-firehose"
-    sts            = "com.amazonaws.${local.aws_region}.sts"
-    ssm            = "com.amazonaws.${local.aws_region}.ssm"
-    secretsmanager = "com.amazonaws.${local.aws_region}.secretsmanager"
-  }
 
   # S3 gateway endpoint retained (free, better performance)
   gateway_endpoints = {

@@ -29,9 +29,10 @@ module "network" {
   vpc_cidr          = local.vpc_cidr
   public_subnets    = local.public_subnets
   private_subnets   = local.private_subnets
-  project_vpc_cidrs = local.project_vpc_cidrs
-  gateway_endpoints = local.gateway_endpoints
-  kms_key_arn       = module.kms.key_arns["logs"]
+  project_vpc_cidrs   = local.project_vpc_cidrs
+  gateway_endpoints   = local.gateway_endpoints
+  interface_endpoints = local.interface_endpoints
+  kms_key_arn         = module.kms.key_arns["logs"]
 }
 
 # --------------------------------------------------------------------------------

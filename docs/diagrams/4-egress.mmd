@@ -1,0 +1,10 @@
+graph LR
+    ECS["ECS Task<br/>(Project VPC)"] -->|"0.0.0.0/0"| RT["Private RT"]
+    RT -->|TGW Attachment| TGW["Transit Gateway"]
+    TGW -->|Default Route| Shared["Shared VPC<br/>Private Subnet"]
+    Shared -->|"(NAT GW未構築)"| NAT["NAT Gateway<br/>(未構築)"]
+    NAT -.->|"(将来)"| IGW_Shared["IGW<br/>(未構築)"]
+    IGW_Shared -.->|"(将来)"| Internet["Internet"]
+
+    ECS -->|"AWS Services"| VPCE["VPC Endpoints<br/>(ECR/Logs/Firehose/STS/SSM/SM)"]
+    ECS -->|"S3"| S3GW["S3 Gateway Endpoint"]

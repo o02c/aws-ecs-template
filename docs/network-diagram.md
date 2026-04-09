@@ -1,0 +1,327 @@
+# ネットワーク構成図
+
+## 全体構成
+
+```mermaid
+graph TB
+    %% ============================================================
+    %% External
+    %% ============================================================
+    Internet["Internet Users"]
+    Route53["Route53 Hosted Zone"]
+
+    Internet -->|HTTPS| Route53
+
+    %% ============================================================
+    %% CloudFront + WAF (per lane)
+    %% ============================================================
+    subgraph CloudFront_Layer["CloudFront Edge"]
+        subgraph CF_User["user lane"]
+            WAF_User["WAFv2 WebACL<br/>Common/SQLi/BadInputs/RateLimit"]
+            CF_User_Dist["CloudFront Distribution<br/>(user)"]
+            CF_User_OAC["OAC (user)"]
+            CF_User_SigningKey["Public Key / Key Group<br/>(Signed URL)"]
+        end
+        subgraph CF_Admin["admin lane"]
+            WAF_Admin["WAFv2 WebACL<br/>Common/SQLi/BadInputs/RateLimit"]
+            CF_Admin_Dist["CloudFront Distribution<br/>(admin)"]
+            CF_Admin_OAC["OAC (admin)"]
+            CF_Admin_SigningKey["Public Key / Key Group<br/>(Signed URL)"]
+        end
+    end
+
+    Route53 -->|Alias| CF_User_Dist
+    Route53 -->|Alias| CF_Admin_Dist
+    WAF_User -->|Protect| CF_User_Dist
+    WAF_Admin -->|Protect| CF_Admin_Dist
+    CF_User_SigningKey -.->|Signed URLs| CF_User_Dist
+    CF_Admin_SigningKey -.->|Signed URLs| CF_Admin_Dist
+
+    %% ============================================================
+    %% ACM Certificates
+    %% ============================================================
+    ACM_CF["ACM Certificate<br/>(us-east-1, CloudFront)"]
+    ACM_Regional["ACM Certificate<br/>(ap-northeast-1, ALB)"]
+
+    ACM_CF -.->|TLS| CF_User_Dist
+    ACM_CF -.->|TLS| CF_Admin_Dist
+
+    %% ============================================================
+    %% Project VPC
+    %% ============================================================
+    subgraph Project_VPC["Project VPC (10.1.0.0/16)"]
+        IGW["IGW<br/>(CloudFront VPC Origins用<br/>ルーティング不使用)"]
+
+        subgraph Private_Subnets["Private Subnets"]
+            subgraph AZ_1a["ap-northeast-1a"]
+                Subnet_1a["Private Subnet<br/>10.1.11.0/24"]
+            end
+            subgraph AZ_1c["ap-northeast-1c"]
+                Subnet_1c["Private Subnet<br/>10.1.12.0/24"]
+            end
+        end
+
+        RT_Private["Private Route Table<br/>0.0.0.0/0 → TGW"]
+
+        %% ---- ALB (per lane) ----
+        subgraph ALB_Layer["Internal ALB"]
+            ALB_User["ALB (user)<br/>HTTPS:443<br/>SG: user-alb"]
+            ALB_Admin["ALB (admin)<br/>HTTPS:443<br/>SG: admin-alb"]
+            TG_User["Target Group (user)<br/>HTTP:80"]
+            TG_Admin["Target Group (admin)<br/>HTTP:80"]
+        end
+
+        ALB_User --> TG_User
+        ALB_Admin --> TG_Admin
+        ACM_Regional -.->|TLS| ALB_User
+        ACM_Regional -.->|TLS| ALB_Admin
+
+        %% ---- ECS ----
+        subgraph ECS_Layer["ECS Cluster"]
+            ECS_Cluster["ECS Cluster<br/>(Fargate + Fargate Spot)<br/>Container Insights"]
+            subgraph ECS_Services["ECS Services"]
+                ECS_Task_User["ECS Task (user-api)<br/>SG: ecs"]
+                ECS_Task_Admin["ECS Task (admin-api)<br/>SG: ecs"]
+                Nginx_Sidecar["nginx sidecar"]
+                FluentBit_Sidecar["fluent-bit sidecar<br/>(FireLens)"]
+            end
+        end
+
+        TG_User -->|container_port| ECS_Task_User
+        TG_Admin -->|container_port| ECS_Task_Admin
+
+        %% ---- Aurora ----
+        Aurora["Aurora PostgreSQL<br/>Serverless v2<br/>Port 5432<br/>SG: db<br/>IAM Auth / SSL強制"]
+
+        ECS_Task_User -->|"5432 (SG: ecs→db)"| Aurora
+        ECS_Task_Admin -->|"5432 (SG: ecs→db)"| Aurora
+
+        %% ---- VPC Endpoints (Gateway only, Interface moved to Shared VPC) ----
+        VPCe_S3["S3 Gateway Endpoint"]
+
+        ECS_Task_User -->|"443 (CIDR→TGW→Shared VPCE)"| TGW_Attach_Project
+        ECS_Task_Admin -->|"443 (CIDR→TGW→Shared VPCE)"| TGW_Attach_Project
+        ECS_Task_User -->|"443 (SG: ecs→s3 prefix list)"| VPCe_S3
+        ECS_Task_Admin -->|"443 (SG: ecs→s3 prefix list)"| VPCe_S3
+
+        %% ---- Route53 PHZ Association ----
+        PHZ_Assoc["Route53 PHZ Association<br/>(DNS → Shared VPC Endpoints)"]
+
+        %% ---- SG Shell Definitions ----
+        SG_Note["Security Groups (network module):<br/>ecs / db / user-alb / admin-alb<br/>(empty shells, rules added by consuming modules)"]
+
+        %% ---- VPC Flow Logs ----
+        FlowLog_Project["VPC Flow Logs<br/>(ALL traffic)"]
+    end
+
+    %% ---- CloudFront → ALB (VPC Origin) ----
+    CF_User_Dist -->|"VPC Origin (HTTPS)"| ALB_User
+    CF_Admin_Dist -->|"VPC Origin (HTTPS)"| ALB_Admin
+
+    %% ---- CloudFront → S3 (OAC) ----
+    CF_User_OAC -->|SigV4| S3_User
+    CF_Admin_OAC -->|SigV4| S3_Admin
+
+    %% ============================================================
+    %% S3 Buckets (outside VPC)
+    %% ============================================================
+    subgraph S3_Buckets["S3 Buckets"]
+        S3_User["S3 (user assets)<br/>KMS暗号化 / Versioning"]
+        S3_Admin["S3 (admin assets)<br/>KMS暗号化 / Versioning"]
+        S3_AccessLogs["S3 (access logs)<br/>ALB/CloudFront/S3ログ集約<br/>90日→Glacier / 365日expire"]
+        S3_AuditLogs["S3 (audit logs)<br/>KMS暗号化<br/>アプリ監査ログ"]
+    end
+
+    %% ============================================================
+    %% Logging
+    %% ============================================================
+    subgraph Logging["Logging"]
+        CW_FlowLog_Project["CloudWatch Logs<br/>/aws/vpc/flow-log/myapp-dev"]
+        CW_ECS_Logs["CloudWatch Logs<br/>(per-service ECS logs)"]
+        CW_WAF_User["CloudWatch Logs<br/>(WAF user, us-east-1)"]
+        CW_WAF_Admin["CloudWatch Logs<br/>(WAF admin, us-east-1)"]
+        Firehose["Kinesis Firehose<br/>audit_logs stream<br/>→ GZIP / 5MB or 60s buffer"]
+    end
+
+    FlowLog_Project --> CW_FlowLog_Project
+    FluentBit_Sidecar --> CW_ECS_Logs
+    FluentBit_Sidecar --> Firehose
+    Firehose --> S3_AuditLogs
+    WAF_User --> CW_WAF_User
+    WAF_Admin --> CW_WAF_Admin
+    ALB_User -->|access log| S3_AccessLogs
+    ALB_Admin -->|access log| S3_AccessLogs
+    CF_User_Dist -->|access log| S3_AccessLogs
+    CF_Admin_Dist -->|access log| S3_AccessLogs
+
+    %% ============================================================
+    %% Transit Gateway
+    %% ============================================================
+    subgraph TGW["Transit Gateway"]
+        TGW_Hub["Transit Gateway<br/>DNS Support"]
+        TGW_Attach_Project["TGW Attachment<br/>(Project VPC private subnets)"]
+        TGW_Attach_Shared["TGW Attachment<br/>(Shared VPC private subnets)"]
+        TGW_Route["TGW Route Table<br/>0.0.0.0/0 → Shared VPC"]
+    end
+
+    RT_Private -->|"0.0.0.0/0"| TGW_Attach_Project
+    TGW_Attach_Project --> TGW_Hub
+    TGW_Hub --> TGW_Attach_Shared
+
+    %% ============================================================
+    %% Shared VPC
+    %% ============================================================
+    subgraph Shared_VPC["Shared VPC (10.0.0.0/16)"]
+        subgraph Shared_Public["Public Subnets (NAT GW用)"]
+            Shared_Pub_1a["Public Subnet<br/>10.0.1.0/24<br/>(ap-northeast-1a)"]
+            Shared_Pub_1c["Public Subnet<br/>10.0.2.0/24<br/>(ap-northeast-1c)"]
+        end
+        subgraph Shared_Private["Private Subnets"]
+            Shared_Priv_1a["Private Subnet<br/>10.0.11.0/24<br/>(ap-northeast-1a)"]
+            Shared_Priv_1c["Private Subnet<br/>10.0.12.0/24<br/>(ap-northeast-1c)"]
+        end
+
+        Shared_RT_Public["Public Route Table<br/>10.1.0.0/16 → TGW"]
+        Shared_RT_Private["Private Route Table (per AZ)<br/>10.1.0.0/16 → TGW"]
+        Shared_VPCe_S3["S3 Gateway Endpoint"]
+
+        subgraph Shared_VPCe["Interface Endpoints (Centralized)<br/>SG: shared-vpce"]
+            Shared_VPCe_ECR_API["ecr.api"]
+            Shared_VPCe_ECR_DKR["ecr.dkr"]
+            Shared_VPCe_Logs["logs"]
+            Shared_VPCe_Firehose["kinesis-firehose"]
+            Shared_VPCe_STS["sts"]
+            Shared_VPCe_SSM["ssm"]
+            Shared_VPCe_SM["secretsmanager"]
+        end
+
+        subgraph Shared_PHZ["Route53 Private Hosted Zones"]
+            PHZ_Services["PHZ per service domain<br/>(private_dns_enabled=false)<br/>ALIAS → Endpoint ENI"]
+        end
+
+        Shared_FlowLog["VPC Flow Logs<br/>(ALL traffic)"]
+        CW_FlowLog_Shared["CloudWatch Logs<br/>/aws/vpc/flow-log/shared"]
+    end
+
+    TGW_Attach_Shared --> Shared_Priv_1a
+    TGW_Attach_Shared --> Shared_Priv_1c
+    Shared_FlowLog --> CW_FlowLog_Shared
+
+    %% ============================================================
+    %% CI/CD Pipeline
+    %% ============================================================
+    subgraph CICD["CI/CD Pipeline (per service)"]
+        S3_Source["S3 (source artifact)<br/>source.zip"]
+        EventBridge["EventBridge<br/>(S3 object put trigger)"]
+        CodePipeline["CodePipeline V2"]
+        CodeBuild_Build["CodeBuild (build)<br/>Docker build → ECR push"]
+        CodeBuild_Deploy["CodeBuild (deploy)<br/>ecspresso deploy"]
+    end
+
+    subgraph ECR["ECR"]
+        ECR_App["ECR Repository<br/>(per-service)"]
+        ECR_Nginx["ECR Repository<br/>(nginx shared)"]
+        ECR_FluentBit["ECR Repository<br/>(fluent-bit shared)"]
+        ECR_Cache["Pull-Through Cache<br/>(public.ecr.aws)"]
+    end
+
+    S3_Source --> EventBridge
+    EventBridge --> CodePipeline
+    CodePipeline --> CodeBuild_Build
+    CodeBuild_Build --> ECR_App
+    CodePipeline --> CodeBuild_Deploy
+    CodeBuild_Deploy --> ECS_Cluster
+
+    %% ============================================================
+    %% KMS
+    %% ============================================================
+    subgraph KMS["KMS CMK"]
+        KMS_RDS["KMS (rds)"]
+        KMS_S3["KMS (s3)"]
+        KMS_Logs["KMS (logs)"]
+        KMS_Secrets["KMS (secrets)"]
+    end
+
+    KMS_RDS -.->|encrypt| Aurora
+    KMS_S3 -.->|encrypt| S3_User
+    KMS_S3 -.->|encrypt| S3_Admin
+    KMS_S3 -.->|encrypt| S3_AuditLogs
+    KMS_Logs -.->|encrypt| CW_FlowLog_Project
+    KMS_Logs -.->|encrypt| CW_ECS_Logs
+    KMS_Logs -.->|encrypt| CW_FlowLog_Shared
+
+    %% ============================================================
+    %% IAM (key roles)
+    %% ============================================================
+    subgraph IAM["IAM Roles"]
+        IAM_TaskExec["Task Execution Role<br/>(ECR pull, SSM, CW Logs)"]
+        IAM_Task["Task Role (per-service)<br/>(RDS IAM Auth, S3, Firehose, CW Logs)"]
+        IAM_Firehose["Firehose Role<br/>(S3 write, KMS)"]
+        IAM_CodeBuild["CodeBuild Role<br/>(ECR, ECS, S3, CW Logs)"]
+        IAM_CodePipeline["CodePipeline Role"]
+    end
+
+    %% ============================================================
+    %% SSM / Secrets
+    %% ============================================================
+    SSM_Params["SSM Parameter Store<br/>(Django secret keys<br/>per-service, SecureString)"]
+    SecretsManager["Secrets Manager<br/>(Aurora master password<br/>auto-managed)"]
+```
+
+## Security Group フロー
+
+```mermaid
+graph LR
+    CF_VPC_Origin["CloudFront<br/>VPC Origin"] -->|"HTTPS:443<br/>(Managed Prefix List)"| SG_ALB["SG: user-alb<br/>SG: admin-alb"]
+    SG_ALB -->|"container_port<br/>(egress)"| SG_ECS["SG: ecs"]
+    SG_ECS -->|"5432<br/>(egress)"| SG_DB["SG: db"]
+    SG_ECS -->|"443<br/>(egress, CIDR: shared VPC)"| TGW_SG["TGW → Shared VPC<br/>SG: shared-vpce"]
+    SG_ECS -->|"443<br/>(egress, prefix list)"| S3_GW["S3 Gateway<br/>Endpoint"]
+```
+
+## データフロー（リクエスト処理）
+
+```mermaid
+sequenceDiagram
+    participant User as Internet User
+    participant R53 as Route53
+    participant CF as CloudFront
+    participant WAF as WAFv2
+    participant ALB as Internal ALB
+    participant ECS as ECS Task
+    participant DB as Aurora PostgreSQL
+    participant S3 as S3 Assets
+
+    User->>R53: DNS解決 (lane.example.com)
+    R53-->>User: CloudFront Alias
+    User->>CF: HTTPS Request
+    CF->>WAF: リクエスト検査
+    WAF-->>CF: Allow/Block
+
+    alt API Request (default behavior)
+        CF->>ALB: VPC Origin (HTTPS:443)
+        ALB->>ECS: HTTP (container_port)
+        ECS->>DB: PostgreSQL (5432, IAM Auth)
+        DB-->>ECS: Response
+        ECS-->>ALB: Response
+        ALB-->>CF: Response
+    else Static Assets (/assets/*)
+        CF->>S3: OAC (SigV4)
+        S3-->>CF: Static Content
+    end
+
+    CF-->>User: Response
+```
+
+## エグレス経路（Project VPC → Internet）
+
+```mermaid
+graph LR
+    ECS["ECS Task<br/>(Project VPC)"] -->|"AWS Services<br/>(DNS via PHZ)"| RT["Private RT"]
+    RT -->|"0.0.0.0/0 → TGW"| TGW["Transit Gateway"]
+    TGW -->|"→ Shared VPC"| VPCE["Interface Endpoints<br/>(Shared VPC)<br/>ECR/Logs/Firehose/STS/SSM/SM"]
+    VPCE -->|"AWS PrivateLink"| AWS["AWS Services"]
+
+    ECS -->|"S3 (Gateway)"| S3GW["S3 Gateway Endpoint<br/>(Project VPC内)"]
+    S3GW --> AWS
+```
