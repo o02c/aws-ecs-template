@@ -302,7 +302,8 @@ export interface ProjectConfig {
     skipFinalSnapshot: boolean;
   };
   enableCicd: boolean;
-  enableDnsFirewall: boolean;              // インターネット接続有 VPC では true
+  enableDnsFirewall: boolean;              // インターネット接続有 VPC では true 必須
+  deployMode: 'cdk-deploy' | 'template-only'; // 弊社開発: cdk-deploy, クライアント: template-only
 }
 ```
 
@@ -316,6 +317,11 @@ export const config: ProjectConfig = {
   projectName: 'myapp',
   environment: 'dev',
   vpcCidr: '10.1.0.0/16',
+  azs: ['ap-northeast-1a', 'ap-northeast-1c'],
+  privateSubnets: {
+    'ap-northeast-1a': '10.1.11.0/24',
+    'ap-northeast-1c': '10.1.12.0/24',
+  },
   domainName: 'o2c.click',
   lanes: {
     user:  { identifier: 'user' },
@@ -327,6 +333,8 @@ export const config: ProjectConfig = {
   },
   database: { deletionProtection: false, skipFinalSnapshot: true },
   enableCicd: false,
+  enableDnsFirewall: true,   // インターネット接続有 VPC では必須
+  deployMode: 'cdk-deploy',  // 弊社開発環境
 };
 ```
 
