@@ -1,0 +1,20 @@
+version: 0.2
+phases:
+  pre_build:
+    commands:
+      - cd cdk/shared
+      - echo "node_modules included in source zip, skipping npm install"
+  build:
+    commands:
+      - npx cdk synth -c env=$ENV
+      - |
+        for template in cdk.out/*.template.json; do
+          stack_name=$(basename "$template" .template.json)
+          echo "Deploying stack: $stack_name"
+          aws cloudformation deploy \
+            --template-file "$template" \
+            --stack-name "$stack_name" \
+            --role-arn "$CFN_SERVICE_ROLE_ARN" \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+        done
