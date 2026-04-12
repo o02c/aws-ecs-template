@@ -4,6 +4,7 @@ import { SharedConfig } from '../helpers/config-types';
 import { StandardTags } from '../aspects/tagging';
 import { EncryptionEnforcer } from '../aspects/encryption';
 import { NetworkStack } from '../stacks/network-stack';
+import { IamStack } from '../stacks/iam-stack';
 
 export interface SharedStageProps extends StageProps {
   config: SharedConfig;
@@ -32,6 +33,13 @@ export class SharedStage extends Stage {
     new NetworkStack(this, 'NetworkStack', {
       stackName: `Shared-${props.config.environment}-Network`,
       description: 'Shared network infrastructure: VPC, TGW, VPC Endpoints, KMS, DNS Firewall',
+      config: props.config,
+    });
+
+    // IAM: Users, Groups, Policies
+    new IamStack(this, 'IamStack', {
+      stackName: `Shared-${props.config.environment}-Iam`,
+      description: 'Shared IAM infrastructure: users, groups, policies',
       config: props.config,
     });
   }
