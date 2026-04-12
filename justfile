@@ -38,6 +38,26 @@ destroy: _confirm-destroy
     bash scripts/full-destroy.sh
 
 # --------------------------------------------------------------------------------
+# CDK - Shared
+# --------------------------------------------------------------------------------
+
+# Synth CDK shared stacks
+cdk-shared-synth env="dev":
+    cd cdk/shared && npx cdk synth -c env={{env}}
+
+# Diff CDK shared stacks
+cdk-shared-diff env="dev":
+    cd cdk/shared && npx cdk diff -c env={{env}}
+
+# Deploy CDK shared stacks
+cdk-shared-deploy env="dev":
+    cd cdk/shared && npx cdk deploy -c env={{env}} --all --require-approval broadening
+
+# Destroy CDK shared stacks
+cdk-shared-destroy env="dev":
+    cd cdk/shared && npx cdk destroy -c env={{env}} --all --force
+
+# --------------------------------------------------------------------------------
 # Terraform - Shared
 # --------------------------------------------------------------------------------
 
