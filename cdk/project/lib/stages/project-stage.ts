@@ -1,9 +1,10 @@
-import { Stack, StackProps, Stage, StageProps, Aspects } from 'aws-cdk-lib';
+import { Stage, StageProps, Aspects } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { ProjectConfig } from '../helpers/config-types';
 import { StandardTags } from '../aspects/tagging';
 import { EncryptionEnforcer } from '../aspects/encryption';
 import { resourceName } from '../helpers/naming';
+import { FoundationStack } from '../stacks/foundation-stack';
 
 export interface ProjectStageProps extends StageProps {
   config: ProjectConfig;
@@ -30,10 +31,11 @@ export class ProjectStage extends Stage {
     // Enforce encryption on all applicable resources
     Aspects.of(this).add(new EncryptionEnforcer());
 
-    // Placeholder stack - will be replaced by real stacks in P5+
-    new Stack(this, 'PlaceholderStack', {
-      stackName: resourceName(config.projectName, config.environment, 'Placeholder'),
-      description: 'Placeholder stack for project initialization (will be removed)',
+    // Foundation: KMS, Logging, VPC, SecurityGroups, Route53, DNS Firewall
+    new FoundationStack(this, 'FoundationStack', {
+      stackName: resourceName(config.projectName, config.environment, 'Foundation'),
+      description: 'Foundation infrastructure: KMS, Logging, VPC, SecurityGroups, Route53, DNS Firewall',
+      config,
     });
   }
 }
