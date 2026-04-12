@@ -1,4 +1,4 @@
-import { Stack, StackProps } from 'aws-cdk-lib';
+import { Stack, StackProps, Fn } from 'aws-cdk-lib';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -289,8 +289,8 @@ export class FoundationStack extends Stack {
       this, 'SsmPrivateSubnetIds',
       config.projectName, config.environment,
       'private-subnet-ids',
-      JSON.stringify(Object.values(projectVpc.privateSubnetResources).map((s) => s.ref)),
-      'Project VPC private subnet IDs',
+      Fn.join(',', Object.values(projectVpc.privateSubnetResources).map((s) => s.ref)),
+      'Project VPC private subnet IDs (comma-separated)',
     );
 
     for (const [name, sg] of Object.entries(sgSet.securityGroups)) {
