@@ -5,6 +5,7 @@ import { StandardTags } from '../aspects/tagging';
 import { EncryptionEnforcer } from '../aspects/encryption';
 import { resourceName } from '../helpers/naming';
 import { FoundationStack } from '../stacks/foundation-stack';
+import { LaneStack } from '../stacks/lane-stack';
 
 export interface ProjectStageProps extends StageProps {
   config: ProjectConfig;
@@ -37,5 +38,15 @@ export class ProjectStage extends Stage {
       description: 'Foundation infrastructure: KMS, Logging, VPC, SecurityGroups, Route53, DNS Firewall',
       config,
     });
+
+    // Per-lane: ALB, S3 (assets), CloudFront, Route53
+    for (const [laneName] of Object.entries(config.lanes)) {
+      new LaneStack(this, `Lane-${laneName}`, {
+        stackName: resourceName(config.projectName, config.environment, `Lane-${laneName}`),
+        description: `Lane infrastructure for ${laneName}: ALB, S3, CloudFront, Route53`,
+        config,
+        lane: laneName,
+      });
+    }
   }
 }

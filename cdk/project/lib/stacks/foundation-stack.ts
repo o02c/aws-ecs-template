@@ -1,3 +1,4 @@
+import * as cdk from 'aws-cdk-lib';
 import { Stack, StackProps } from 'aws-cdk-lib';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as s3 from 'aws-cdk-lib/aws-s3';
@@ -285,12 +286,23 @@ export class FoundationStack extends Stack {
       'Project VPC ID',
     );
 
+    const subnetRefs = Object.values(projectVpc.privateSubnetResources).map((s) => s.ref);
+
     putSsmParameter(
       this, 'SsmPrivateSubnetIds',
       config.projectName, config.environment,
       'private-subnet-ids',
-      JSON.stringify(Object.values(projectVpc.privateSubnetResources).map((s) => s.ref)),
+      JSON.stringify(subnetRefs),
       'Project VPC private subnet IDs',
+    );
+
+    // Comma-separated format for CloudFormation intrinsic parsing in downstream stacks
+    putSsmParameter(
+      this, 'SsmPrivateSubnetIdsCsv',
+      config.projectName, config.environment,
+      'private-subnet-ids-csv',
+      cdk.Fn.join(',', subnetRefs),
+      'Project VPC private subnet IDs (comma-separated)',
     );
 
     for (const [name, sg] of Object.entries(sgSet.securityGroups)) {
@@ -318,6 +330,13 @@ export class FoundationStack extends Stack {
       config.projectName, config.environment,
       'acm/regional-cert-arn', hostedZone.regionalCertificate.ref,
       'ACM Regional Certificate ARN',
+    );
+
+    putSsmParameter(
+      this, 'SsmHostedZoneId',
+      config.projectName, config.environment,
+      'hosted-zone-id', hostedZone.zone.ref,
+      'Route53 Hosted Zone ID',
     );
 
     putSsmParameter(
