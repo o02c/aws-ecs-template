@@ -7,6 +7,7 @@ import { resourceName } from '../helpers/naming';
 import { FoundationStack } from '../stacks/foundation-stack';
 import { DatabaseStack } from '../stacks/database-stack';
 import { LaneStack } from '../stacks/lane-stack';
+import { ApplicationStack } from '../stacks/application-stack';
 
 export interface ProjectStageProps extends StageProps {
   config: ProjectConfig;
@@ -49,6 +50,7 @@ export class ProjectStage extends Stage {
     database.addDependency(foundation);
 
     // Per-lane: ALB, S3 (assets), CloudFront, Route53
+    const laneStacks: LaneStack[] = [];
     for (const [laneName] of Object.entries(config.lanes)) {
       const lane = new LaneStack(this, `Lane-${laneName}`, {
         stackName: resourceName(config.projectName, config.environment, `Lane-${laneName}`),
@@ -57,6 +59,19 @@ export class ProjectStage extends Stage {
         lane: laneName,
       });
       lane.addDependency(foundation);
+      laneStacks.push(lane);
+    }
+
+    // Application: ECS Cluster, ECR, IAM, Logging, Audit
+    const application = new ApplicationStack(this, 'ApplicationStack', {
+      stackName: resourceName(config.projectName, config.environment, 'Application'),
+      description: 'Application infrastructure: ECS Cluster, ECR, IAM, Logging',
+      config,
+    });
+    application.addDependency(foundation);
+    application.addDependency(database);
+    for (const laneStack of laneStacks) {
+      application.addDependency(laneStack);
     }
   }
 }

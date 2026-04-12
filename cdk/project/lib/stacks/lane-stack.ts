@@ -149,5 +149,19 @@ export class LaneStack extends Stack {
       `alb/${lane}/dns-name`, alb.alb.attrDnsName,
       `ALB DNS name for ${lane} lane`,
     );
+
+    putSsmParameter(
+      this, 'SsmS3BucketArn',
+      config.projectName, config.environment,
+      `s3-bucket/${lane}/arn`, assetBucket.bucket.attrArn,
+      `S3 asset bucket ARN for ${lane} lane`,
+    );
+
+    putSsmParameter(
+      this, 'SsmS3AccessPolicyArn',
+      config.projectName, config.environment,
+      `s3-access-policy/${lane}/arn`, assetBucket.s3AccessPolicy.ref,
+      `S3 access policy ARN for ${lane} lane`,
+    );
   }
 }
