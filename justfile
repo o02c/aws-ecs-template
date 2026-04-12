@@ -58,6 +58,26 @@ cdk-shared-destroy env="dev":
     cd cdk/shared && npx cdk destroy -c env={{env}} --all --force
 
 # --------------------------------------------------------------------------------
+# CDK - Project
+# --------------------------------------------------------------------------------
+
+# Synth CDK project stacks
+cdk-project-synth env="dev":
+    cd cdk/project && npx cdk synth -c env={{env}}
+
+# Diff CDK project stacks
+cdk-project-diff env="dev":
+    cd cdk/project && npx cdk diff -c env={{env}}
+
+# Deploy CDK project stacks
+cdk-project-deploy env="dev":
+    cd cdk/project && npx cdk deploy -c env={{env}} --all --require-approval broadening
+
+# Destroy CDK project stacks
+cdk-project-destroy env="dev":
+    cd cdk/project && npx cdk destroy -c env={{env}} --all --force
+
+# --------------------------------------------------------------------------------
 # Terraform - Shared
 # --------------------------------------------------------------------------------
 
