@@ -1,3 +1,4 @@
+import * as cdk from 'aws-cdk-lib';
 import { Stack, StackProps, Fn } from 'aws-cdk-lib';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as s3 from 'aws-cdk-lib/aws-s3';
@@ -285,6 +286,8 @@ export class FoundationStack extends Stack {
       'Project VPC ID',
     );
 
+    const subnetRefs = Object.values(projectVpc.privateSubnetResources).map((s) => s.ref);
+
     putSsmParameter(
       this, 'SsmPrivateSubnetIds',
       config.projectName, config.environment,
@@ -318,6 +321,13 @@ export class FoundationStack extends Stack {
       config.projectName, config.environment,
       'acm/regional-cert-arn', hostedZone.regionalCertificate.ref,
       'ACM Regional Certificate ARN',
+    );
+
+    putSsmParameter(
+      this, 'SsmHostedZoneId',
+      config.projectName, config.environment,
+      'hosted-zone-id', hostedZone.zone.ref,
+      'Route53 Hosted Zone ID',
     );
 
     putSsmParameter(
