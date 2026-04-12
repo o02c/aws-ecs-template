@@ -1,0 +1,362 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CodeBuild deployer for CDK synth + CloudFormation deploy.
+  Solves the chicken-and-egg problem: this template is manually uploaded
+  via the CloudFormation console with a service role.
+
+# --------------------------------------------------------------------------------
+# Parameters
+# --------------------------------------------------------------------------------
+Parameters:
+  CfnServiceRoleArn:
+    Type: String
+    Description: ARN of the CloudFormation service role used for stack operations
+    AllowedPattern: "arn:aws:iam::\\d{12}:role/.+"
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where CodeBuild runs (must have required VPC Endpoints)
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private Subnet IDs for CodeBuild (comma-delimited)
+
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security Group ID for CodeBuild
+
+  ProjectName:
+    Type: String
+    Default: myapp
+    Description: Project name used in resource naming
+    AllowedPattern: "[a-z0-9-]+"
+
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, stg, prod)
+    AllowedValues:
+      - dev
+      - test
+      - stg
+      - prod
+
+# --------------------------------------------------------------------------------
+# Resources
+# --------------------------------------------------------------------------------
+Resources:
+
+  # ------------------------------------------------------------------------------
+  # S3 Bucket (source code zip)
+  # ------------------------------------------------------------------------------
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Environment}-codebuild-source"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-codebuild-source"
+
+  SourceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SourceBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt SourceBucket.Arn
+              - !Sub "${SourceBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+  # ------------------------------------------------------------------------------
+  # IAM Role (CodeBuild service role)
+  # ------------------------------------------------------------------------------
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-codebuild-deployer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: CloudFormationAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "cloudformation:CreateStack"
+                  - "cloudformation:UpdateStack"
+                  - "cloudformation:DescribeStacks"
+                  - "cloudformation:GetTemplate"
+                  - "cloudformation:CreateChangeSet"
+                  - "cloudformation:DescribeChangeSet"
+                  - "cloudformation:ExecuteChangeSet"
+                  - "cloudformation:DeleteStack"
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*"
+
+        - PolicyName: S3SourceAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                Resource: !Sub "${SourceBucket.Arn}/*"
+              - Effect: Allow
+                Action:
+                  - "s3:GetBucketLocation"
+                Resource: !GetAtt SourceBucket.Arn
+
+        - PolicyName: AssumeRoleAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "sts:AssumeRole"
+                Resource: !Ref CfnServiceRoleArn
+
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+
+        - PolicyName: VpcNetworkAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:DescribeNetworkInterfaces"
+                  - "ec2:DeleteNetworkInterface"
+                  - "ec2:DescribeSubnets"
+                  - "ec2:DescribeSecurityGroups"
+                  - "ec2:DescribeDhcpOptions"
+                  - "ec2:DescribeVpcs"
+                  - "ec2:CreateNetworkInterfacePermission"
+                Resource: "*"
+
+        - PolicyName: SSMParameterAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:GetParameter"
+                  - "ssm:GetParameters"
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*"
+
+        - PolicyName: PassRoleAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: !Ref CfnServiceRoleArn
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-codebuild-deployer"
+
+  # ------------------------------------------------------------------------------
+  # CodeBuild Project (shared-deployer)
+  # ------------------------------------------------------------------------------
+  SharedDeployer:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-shared-deployer"
+      Description: "Deploy shared infrastructure via cdk synth + cfn deploy"
+      Source:
+        Type: S3
+        Location: !Sub "${SourceBucket}/${ProjectName}-shared-source.zip"
+        BuildSpec: cdk/bootstrap/buildspec-shared.yml
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+          - Name: CFN_SERVICE_ROLE_ARN
+            Value: !Ref CfnServiceRoleArn
+          - Name: ENV
+            Value: !Ref Environment
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      VpcConfig:
+        VpcId: !Ref VpcId
+        Subnets: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub "/aws/codebuild/${ProjectName}-${Environment}-shared-deployer"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-shared-deployer"
+
+  # ------------------------------------------------------------------------------
+  # CodeBuild Project (project-deployer)
+  # ------------------------------------------------------------------------------
+  ProjectDeployer:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-project-deployer"
+      Description: "Deploy project infrastructure via cdk synth + cfn deploy"
+      Source:
+        Type: S3
+        Location: !Sub "${SourceBucket}/${ProjectName}-project-source.zip"
+        BuildSpec: cdk/bootstrap/buildspec-project.yml
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+          - Name: CFN_SERVICE_ROLE_ARN
+            Value: !Ref CfnServiceRoleArn
+          - Name: ENV
+            Value: !Ref Environment
+          - Name: PROJECT_NAME
+            Value: !Ref ProjectName
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      VpcConfig:
+        VpcId: !Ref VpcId
+        Subnets: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub "/aws/codebuild/${ProjectName}-${Environment}-project-deployer"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-project-deployer"
+
+  # ------------------------------------------------------------------------------
+  # EventBridge Rule (S3 PutObject -> CodeBuild trigger)
+  # ------------------------------------------------------------------------------
+  SharedSourceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-shared-source-trigger"
+      Description: "Trigger shared-deployer on S3 source upload"
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - "Object Created"
+        detail:
+          bucket:
+            name:
+              - !Ref SourceBucket
+          object:
+            key:
+              - prefix: !Sub "${ProjectName}-shared-source.zip"
+      Targets:
+        - Id: SharedDeployerTarget
+          Arn: !GetAtt SharedDeployer.Arn
+          RoleArn: !GetAtt EventBridgeRole.Arn
+
+  ProjectSourceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-project-source-trigger"
+      Description: "Trigger project-deployer on S3 source upload"
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - "Object Created"
+        detail:
+          bucket:
+            name:
+              - !Ref SourceBucket
+          object:
+            key:
+              - prefix: !Sub "${ProjectName}-project-source.zip"
+      Targets:
+        - Id: ProjectDeployerTarget
+          Arn: !GetAtt ProjectDeployer.Arn
+          RoleArn: !GetAtt EventBridgeRole.Arn
+
+  EventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-eventbridge-codebuild"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: StartBuild
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "codebuild:StartBuild"
+                Resource:
+                  - !GetAtt SharedDeployer.Arn
+                  - !GetAtt ProjectDeployer.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-eventbridge-codebuild"
+
+# --------------------------------------------------------------------------------
+# Outputs
+# --------------------------------------------------------------------------------
+Outputs:
+  SourceBucketName:
+    Description: S3 bucket for source code zip files
+    Value: !Ref SourceBucket
+
+  SharedDeployerName:
+    Description: CodeBuild project name for shared infrastructure
+    Value: !Ref SharedDeployer
+
+  ProjectDeployerName:
+    Description: CodeBuild project name for project infrastructure
+    Value: !Ref ProjectDeployer
+
+  CodeBuildServiceRoleArn:
+    Description: IAM Role ARN used by CodeBuild
+    Value: !GetAtt CodeBuildServiceRole.Arn
