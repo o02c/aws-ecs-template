@@ -5,6 +5,7 @@ import { StandardTags } from '../aspects/tagging';
 import { EncryptionEnforcer } from '../aspects/encryption';
 import { resourceName } from '../helpers/naming';
 import { FoundationStack } from '../stacks/foundation-stack';
+import { DatabaseStack } from '../stacks/database-stack';
 
 export interface ProjectStageProps extends StageProps {
   config: ProjectConfig;
@@ -32,10 +33,18 @@ export class ProjectStage extends Stage {
     Aspects.of(this).add(new EncryptionEnforcer());
 
     // Foundation: KMS, Logging, VPC, SecurityGroups, Route53, DNS Firewall
-    new FoundationStack(this, 'FoundationStack', {
+    const foundation = new FoundationStack(this, 'FoundationStack', {
       stackName: resourceName(config.projectName, config.environment, 'Foundation'),
       description: 'Foundation infrastructure: KMS, Logging, VPC, SecurityGroups, Route53, DNS Firewall',
       config,
     });
+
+    // Database: Aurora PostgreSQL Serverless v2
+    const database = new DatabaseStack(this, 'DatabaseStack', {
+      stackName: resourceName(config.projectName, config.environment, 'Database'),
+      description: 'Database infrastructure: Aurora PostgreSQL Serverless v2',
+      config,
+    });
+    database.addDependency(foundation);
   }
 }
