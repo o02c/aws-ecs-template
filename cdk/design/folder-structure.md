@@ -26,6 +26,7 @@ Terraform が全社 NG になる可能性があるため、既存 Terraform 構�
 4. **フラット優先**: ディレクトリ階層は最小限。同カテゴリ 3 ファイル以上でサブディレクトリ化
 5. **秘匿値は CDK 外で管理**: CDK/CloudFormation で秘匿値を作成しない。事前作成 → 参照のみ
 6. **SSM で疎結合**: リポジトリ間・Stack 間の参照は全て SSM Parameter Store
+7. **2 環境モード**: 開発環境は `cdk deploy`、クライアント環境は `BootstraplessSynthesizer` + CFn テンプレート投入。環境ディレクトリで分離 (flag ではない)
 
 ---
 
@@ -50,8 +51,9 @@ cdk/
     lib/
       constructs/                  # Construct (フラット配置)
         shared-vpc.ts              # Shared VPC + NAT GW + TGW + Endpoints
+        dns-firewall.ts            # Route53 Resolver DNS Firewall (セキュリティ必須)
       stacks/
-        network-stack.ts           # KMS + VPC + TGW + Endpoints
+        network-stack.ts           # KMS + VPC + TGW + Endpoints + DNS Firewall
         iam-stack.ts               # IAM Users/Groups (直書き)
       stages/
         shared-stage.ts            # Stack 群をグループ化
@@ -86,9 +88,10 @@ cdk/
         internal-alb.ts            # Internal ALB + Listener + TG
         asset-bucket.ts            # S3 + OAC + Versioning + Encryption
         lane-distribution.ts       # CloudFront + WAF + Route53 Alias
-        application.ts             # ECS Cluster + ECR + IAM (統合)
+        application.ts             # ECS Cluster + ECR + IAM + FireLens logging (統合)
         deploy-pipeline.ts         # CodePipeline + CodeBuild + EventBridge
         hosted-zone.ts             # Route53 + ACM (Regional + us-east-1)
+        dns-firewall.ts            # Route53 Resolver DNS Firewall (セキュリティ必須)
       stacks/
         foundation-stack.ts        # KMS + Logging + VPC + DNS
         database-stack.ts          # Aurora (分離: 削除保護, 独立ライフサイクル)
@@ -136,9 +139,10 @@ project 側は上記パスから SSM を読むだけ。shared のコードを参
 | 分類 | 方針 | 理由 |
 |------|------|------|
 | SharedVpc | Construct に切り出す | 構成が大きく Stack から分離したい |
+| DnsFirewall | Construct に切り出す | セキュリティ必須、インターネット接続有 VPC で必要 |
 | IAM, KMS Keys | Stack に直書き | 各 1 箇所でしか使わない |
 
-初期 Construct 数: **1 ファイル**
+初期 Construct 数: **2 ファイル**
 
 **project リポジトリ:**
 
@@ -146,10 +150,11 @@ project 側は上記パスから SSM を読むだけ。shared のコードを参
 |------|------|------|
 | ProjectVpc, InternalAlb, AssetBucket, LaneDistribution, AuroraServerless | Construct に切り出す | per-lane で複数回使用 or 構成が大きい |
 | SecurityGroupSet, HostedZone | Construct に切り出す | Props IF が明確で再利用価値がある |
-| Application (ECS+ECR+IAM) | 1 ファイルに統合 | 元は 3 ファイルだが常にセットで使う |
+| Application (ECS+ECR+IAM+FireLens) | 1 ファイルに統合 | ECS cluster, ECR, per-service IAM, FireLens logging (CloudWatch + S3 audit + Firehose) を含む |
+| DnsFirewall | Construct に切り出す | セキュリティ必須。インターネット接続有 VPC ではホワイトリスト形式で DNS クエリを制御 |
 | KMS Keys, Logging | Stack に直書き | 各 1 箇所でしか使わない |
 
-初期 Construct 数: **9 ファイル**
+初期 Construct 数: **11 ファイル**
 
 ### コード共有について
 
@@ -185,7 +190,8 @@ App (bin/app.ts)
   └── SharedStage (per-env)
         ├── NetworkStack
         │     ├── KMS Keys (直書き)
-        │     └── SharedVpc          ← TGW ID, PHZ IDs を SSM に書込
+        │     ├── SharedVpc          ← TGW ID, PHZ IDs を SSM に書込
+        │     └── DnsFirewall
         └── IamStack                 (直書き、Construct 不使用)
 
 [aws-ecs-template リポジトリ (project)]
@@ -195,7 +201,8 @@ App (bin/app.ts)
         │     ├── KMS Keys (直書き)
         │     ├── Logging (直書き)
         │     ├── ProjectVpc          ← SSM から TGW ID を読取
-        │     └── HostedZone
+        │     ├── HostedZone
+        │     └── DnsFirewall (enableDnsFirewall 時)
         ├── DatabaseStack
         │     └── AuroraServerless
         ├── LaneStack["user"]
@@ -267,8 +274,9 @@ export interface SharedConfig {
   azs: string[];
   publicSubnets: Record<string, string>;   // AZ -> CIDR
   privateSubnets: Record<string, string>;
-  interfaceEndpoints: string[];
-  projectVpcCidrs: Record<string, string>;  // project名 -> CIDR
+  interfaceEndpoints: Record<string, string>; // 論理名 -> サービス名 (例: { 'ecr-api': 'ecr.api' })
+  projectVpcCidrs: Record<string, string>;    // project名 -> CIDR
+  // IAM は IamStack に直書き (SharedConfig に持たせない)
 }
 
 export interface LaneConfig {
@@ -284,6 +292,8 @@ export interface ProjectConfig {
   projectName: string;
   environment: string;
   vpcCidr: string;
+  azs: string[];
+  privateSubnets: Record<string, string>;  // AZ -> CIDR
   domainName: string;
   lanes: Record<string, LaneConfig>;
   services: Record<string, ServiceConfig>;
@@ -292,6 +302,7 @@ export interface ProjectConfig {
     skipFinalSnapshot: boolean;
   };
   enableCicd: boolean;
+  enableDnsFirewall: boolean;              // インターネット接続有 VPC では true
 }
 ```
 
@@ -400,6 +411,10 @@ const tgwId = ssm.StringParameter.valueForStringParameter(
 | `/<project>/<env>/infra/private-subnet-ids` | FoundationStack | DatabaseStack, LaneStack, ApplicationStack | サブネット配置 |
 | `/<project>/<env>/infra/sg/<name>/id` | FoundationStack | DatabaseStack, LaneStack, ApplicationStack | SG 参照 |
 | `/<project>/<env>/infra/kms/<key>/arn` | FoundationStack | DatabaseStack, LaneStack, ApplicationStack | 暗号化 |
+| `/<project>/<env>/infra/acm/regional-cert-arn` | FoundationStack | LaneStack (ALB) | リージョン ACM 証明書 |
+| `/<project>/<env>/infra/acm/cloudfront-cert-arn` | FoundationStack or 外部 | LaneStack (CloudFront) | us-east-1 ACM 証明書 (#16 確認待ち) |
+| `/<project>/<env>/infra/logging-bucket-id` | FoundationStack | LaneStack, ApplicationStack | アクセスログ S3 バケット |
+| `/<project>/<env>/infra/logging-bucket-domain` | FoundationStack | LaneStack | ALB/CloudFront ログ出力先 |
 | `/<project>/<env>/infra/ecs-cluster-name` | ApplicationStack | ecspresso | クラスタ名 |
 | `/<project>/<env>/infra/ecr/<service>/url` | ApplicationStack | ecspresso | ECR URL |
 | `/<project>/<env>/infra/task-execution-role-arn` | ApplicationStack | ecspresso | タスク実行ロール |
@@ -667,7 +682,125 @@ CDK が自動生成する以下のリソースが全て共通禁止 #2 に抵触
 
 ---
 
-## 13. Terraform からの移行方針
+## 13. デプロイ環境と Bootstrap 方針
+
+### 2 環境モード
+
+開発環境とクライアント環境で CDK の使い方が異なる。flag ではなく**環境ディレクトリで分離**する。
+
+| 環境 | デプロイ方式 | Synthesizer | Bootstrap |
+|------|------------|------------|-----------|
+| **弊社開発** (`config/environments/dev.ts`) | `cdk deploy` | `DefaultStackSynthesizer` | 必要 (`cdk bootstrap`) |
+| **クライアント** (`config/environments/client-*.ts`) | CodeBuild → CFn テンプレート投入 | `BootstraplessSynthesizer` | **不要** |
+
+### BootstraplessSynthesizer
+
+CDK の標準デプロイは `cdk bootstrap` で以下を事前作成する必要がある:
+- S3 バケット (テンプレート/Assets 保管)
+- IAM ロール 4 種 (deploy, CFn execution, file publish, image publish)
+- ECR リポジトリ
+
+クライアント環境では CFn サービスロール指定が必須 (2.2.20 #2) かつ、
+bootstrap stack 自体の作成にもサービスロール問題が生じるため、
+`BootstraplessSynthesizer` を使って bootstrap を完全に不要にする。
+
+```typescript
+// bin/app.ts
+const env = app.node.tryGetContext('env') || 'dev';
+const { config } = await import(`../config/environments/${env}`);
+
+const synthesizer = config.deployMode === 'template-only'
+  ? new cdk.BootstraplessSynthesizer()
+  : new cdk.DefaultStackSynthesizer();
+
+new ProjectStage(app, `${config.projectName}-${config.environment}`, {
+  env: { account: config.account.accountId, region: config.account.region },
+  config,
+  synthesizer,
+});
+```
+
+### CloudFormation サービスロール (クライアント環境)
+
+クライアント環境のセキュリティルール (2.2.20 #2):
+
+> サービスロールを指定せずにCloudFormationスタックを作成することの禁止
+
+CodeBuild からのデプロイ時、全ての CloudFormation 操作にサービスロール ARN を指定する:
+
+```bash
+# CodeBuild の buildspec.yml 内
+aws cloudformation deploy \
+  --template-file cdk.out/myapp-client-prod-Foundation.template.json \
+  --stack-name myapp-client-prod-Foundation \
+  --role-arn arn:aws:iam::${ACCOUNT_ID}:role/${CFN_SERVICE_ROLE_NAME} \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --no-fail-on-empty-changeset
+```
+
+サービスロール ARN は CodeBuild の環境変数で渡す。
+
+### CodeBuild デプロイ環境 (クライアント環境)
+
+```
+[クライアント環境 - Project VPC Private Subnet]
+  CodeBuild (VPC 内)
+    ├── ソース: S3 zip (node_modules 同梱)
+    ├── 1. cdk synth → cdk.out/ にテンプレート生成
+    ├── 2. Stack ごとに aws cloudformation deploy --role-arn ...
+    └── ログ: CloudWatch Logs (VPC Endpoint)
+```
+
+必要な VPC Endpoint:
+
+| サービス | 種別 | 用途 |
+|---------|------|------|
+| `s3` | Gateway (無料) | テンプレート保管 |
+| `cloudformation` | Interface | Stack 操作 |
+| `logs` | Interface | CodeBuild ログ |
+| `codebuild` | Interface | ビルド自身 |
+| `sts` | Interface | サービスロール assume |
+
+### Bootstrap 用 CFn テンプレート (鶏卵問題)
+
+CodeBuild 自体を CDK で作るには、最初の CodeBuild をどうやって作るかという鶏卵問題がある。
+手動アップロード用の最小 CloudFormation テンプレートを用意する:
+
+```
+cdk/
+  bootstrap/
+    codebuild-deployer.yaml        # CodeBuild + IAM Role + S3 ソース置き場
+    README.md                      # 初回セットアップ手順
+```
+
+初回のみこのテンプレートを CFn コンソールからサービスロール指定で手動デプロイ。
+以降は S3 にコード zip を置けば CodeBuild が `cdk synth` → CFn deploy を実行する。
+
+### 使えない CDK 機能 (クライアント環境の制約)
+
+`BootstraplessSynthesizer` + テンプレート投入方式では以下が使えない:
+
+| 機能 | 理由 | 代替策 |
+|------|------|--------|
+| `Vpc.fromLookup()` | synth 時に AWS API 必要 | config に VPC ID をハードコード or `valueForStringParameter` |
+| `StringParameter.valueFromLookup()` | 同上 | `valueForStringParameter()` (デプロイ時解決) |
+| Assets (Lambda コード, Docker イメージ) | bootstrap S3/ECR 不要 | Lambda は inline、コンテナは ecspresso/別 CodeBuild |
+| `crossRegionReferences` | us-east-1 に Custom Resource 必要 | #16 確認待ち |
+| Custom Resources 全般 | bootstrap 前提 | 使わない設計にする |
+| `cdk diff` (リモート比較) | API 必要 | CFn ChangeSet を CLI で作成して確認 |
+
+開発環境ではこれらの機能を使用可能。CI で `template-only` モードの synth 成功を必須化し、クライアント環境で動かない機能の誤用を自動検出する。
+
+---
+
+## 14. Terraform 側の対応
+
+既存 Terraform の `terraform/project/modules/` に DNS Firewall モジュールが既にあるが無効化 (コメントアウト) されている。
+セキュリティテンプレート (L916-920) によりインターネット接続有 VPC では必須のため、Terraform 側でも有効化する。
+
+---
+
+## 15. Terraform からの移行方針
 
 ### Phase 1: CDK コード開発
 - Terraform と並行して CDK コードを開発
@@ -683,7 +816,7 @@ CDK が自動生成する以下のリソースが全て共通禁止 #2 に抵触
 ### Phase 4: ecspresso 移行
 - tfstate plugin → ssm plugin へ変更 (サービス単位で段階的に)
 
-### Phase 5: CDK Pipelines 導入 (将来)
+### Phase 5: CDK Pipelines 導入 (将来、開発環境のみ)
 - CDK インフラ自体の CI/CD に CDK Pipelines (`aws-cdk-lib/pipelines`) を導入
 - `SharedStage` / `ProjectStage` の構造が `pipeline.addStage()` に対応しているため導入障壁は低い
 - 複数環境へのデプロイに Wave/Stage 機能を活用
@@ -691,23 +824,24 @@ CDK が自動生成する以下のリソースが全て共通禁止 #2 に抵触
 
 ---
 
-## 14. 依存パッケージ
+## 16. 依存パッケージ
 
 ```json
 {
   "dependencies": {
-    "aws-cdk-lib": "^2.x",
-    "constructs": "^10.x"
+    "aws-cdk-lib": "2.180.0",
+    "constructs": "10.4.2"
   },
   "devDependencies": {
-    "aws-cdk": "^2.x",
-    "typescript": "^5.x",
-    "jest": "^29.x",
-    "ts-jest": "^29.x",
-    "@types/jest": "^29.x",
-    "@types/node": "^20.x"
+    "aws-cdk": "2.180.0",
+    "typescript": "~5.7.0",
+    "jest": "~29.7.0",
+    "ts-jest": "~29.7.0",
+    "@types/jest": "~29.5.0",
+    "@types/node": "~20.17.0"
   }
 }
 ```
 
-サードパーティ Construct ライブラリは初期段階では不要。全て `aws-cdk-lib` で実装。
+- exact pin (`aws-cdk-lib`, `aws-cdk`) で CDK バージョンを固定 (Section 12 と統一)
+- サードパーティ Construct ライブラリは初期段階では不要。全て `aws-cdk-lib` で実装
