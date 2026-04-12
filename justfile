@@ -78,6 +78,20 @@ cdk-project-destroy env="dev":
     cd cdk/project && npx cdk destroy -c env={{env}} --all --force
 
 # --------------------------------------------------------------------------------
+# CDK - Full deploy/destroy cycle
+# --------------------------------------------------------------------------------
+
+# CDK - Full deploy cycle (shared -> project)
+cdk-deploy-all env="dev":
+    cd cdk/shared && npx cdk deploy -c env={{env}} --all --require-approval broadening
+    cd cdk/project && npx cdk deploy -c env={{env}} --all --require-approval broadening
+
+# CDK - Full destroy cycle (project -> shared, reverse order)
+cdk-destroy-all env="dev":
+    cd cdk/project && npx cdk destroy -c env={{env}} --all --force
+    cd cdk/shared && npx cdk destroy -c env={{env}} --all --force
+
+# --------------------------------------------------------------------------------
 # Terraform - Shared
 # --------------------------------------------------------------------------------
 

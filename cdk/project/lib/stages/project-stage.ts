@@ -1,4 +1,4 @@
-import { Stage, StageProps, Aspects } from 'aws-cdk-lib';
+import { Stage, StageProps, Aspects, StackProps, BootstraplessSynthesizer } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { ProjectConfig } from '../helpers/config-types';
 import { StandardTags } from '../aspects/tagging';
@@ -22,6 +22,12 @@ export class ProjectStage extends Stage {
     super(scope, id, props);
 
     const { config } = props;
+    const isTemplateOnly = config.deployMode === 'template-only';
+
+    // Helper to create synthesizer props for template-only mode
+    // Each stack needs its own BootstraplessSynthesizer instance
+    const synthProps = (): Partial<StackProps> =>
+      isTemplateOnly ? { synthesizer: new BootstraplessSynthesizer() } : {};
 
     // Apply standard tags to all resources in this stage
     Aspects.of(this).add(
@@ -39,6 +45,7 @@ export class ProjectStage extends Stage {
       stackName: resourceName(config.projectName, config.environment, 'Foundation'),
       description: 'Foundation infrastructure: KMS, Logging, VPC, SecurityGroups, Route53, DNS Firewall',
       config,
+      ...synthProps(),
     });
 
     // Database: Aurora PostgreSQL Serverless v2
@@ -46,6 +53,7 @@ export class ProjectStage extends Stage {
       stackName: resourceName(config.projectName, config.environment, 'Database'),
       description: 'Database infrastructure: Aurora PostgreSQL Serverless v2',
       config,
+      ...synthProps(),
     });
     database.addDependency(foundation);
 
@@ -57,6 +65,7 @@ export class ProjectStage extends Stage {
         description: `Lane infrastructure for ${laneName}: ALB, S3, CloudFront, Route53`,
         config,
         lane: laneName,
+        ...synthProps(),
       });
       lane.addDependency(foundation);
       laneStacks.push(lane);
@@ -67,6 +76,7 @@ export class ProjectStage extends Stage {
       stackName: resourceName(config.projectName, config.environment, 'Application'),
       description: 'Application infrastructure: ECS Cluster, ECR, IAM, Logging',
       config,
+      ...synthProps(),
     });
     application.addDependency(foundation);
     application.addDependency(database);
