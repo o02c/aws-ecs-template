@@ -159,6 +159,49 @@ module "app" {
   log_bucket_id                       = module.logging.bucket_id
   container_port                      = local.container_port
   firehose_buffering_interval_seconds = local.firehose_buffering_interval_seconds
+  email_enabled                       = local.email.enabled
+  email_policy_arn                    = local.email.enabled ? one([for _, m in module.email : m.policy_arn]) : ""
+}
+
+# --------------------------------------------------------------------------------
+# Email (SES, optional)
+# --------------------------------------------------------------------------------
+
+module "email" {
+  source   = "../../modules/email"
+  for_each = local.email.enabled ? { this = true } : {}
+
+  project_name        = var.project_name
+  environment         = var.environment
+  domain_name         = var.domain_name
+  route53_zone_id     = module.dns.zone_id
+  mail_from_subdomain = local.email.mail_from_subdomain
+  sender_address      = local.email.sender_address
+  verified_recipients = local.email.verified_recipients
+  dmarc_rua_address   = local.email.dmarc_rua_address
+}
+
+# --------------------------------------------------------------------------------
+# Monitoring (SNS + CloudWatch Alarms)
+# --------------------------------------------------------------------------------
+
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  project_name              = var.project_name
+  environment               = var.environment
+  aws_account_id            = data.aws_caller_identity.current.account_id
+  aws_region                = local.aws_region
+  kms_key_arn               = module.kms.key_arns["sns"]
+  alarm_recipients          = local.alarm_recipients
+  lanes                     = toset(keys(local.lanes))
+  alb_arn_suffixes          = { for lane, lb in module.lb : lane => lb.alb_arn_suffix }
+  target_group_arn_suffixes = { for lane, lb in module.lb : lane => lb.target_group_arn_suffix }
+  ecs_cluster_name          = module.app.ecs_cluster_name
+  ecs_service_names         = { for k, _ in local.services : k => k }
+  aurora_cluster_identifier = module.db.cluster_identifier
+  firehose_stream_names     = module.app.firehose_stream_names
+  thresholds                = local.alarm_thresholds
 }
 
 # --------------------------------------------------------------------------------

@@ -103,6 +103,11 @@
           value: '1',
         },
         {
+          # dev env: expose /api/test/* endpoints. Keep false or unset in prod.
+          name: 'DJANGO_DEBUG',
+          value: 'true',
+        },
+        {
           name: 'ALLOWED_HOSTS',
           value: "localhost,127.0.0.1,{{ tfstate `output.lane_domains['user']` }}",
         },
@@ -121,6 +126,21 @@
         {
           name: 'CLOUDFRONT_SIGNING_KEY_SECRET_ARN',
           value: '',
+        },
+        {
+          name: 'SES_FROM_ADDRESS',
+          value: "{{ tfstate `output.ses_sender_address` }}",
+        },
+        {
+          name: 'SES_ALLOWED_RECIPIENTS',
+          value: "{{ tfstate `output.ses_verified_recipients_csv` }}",
+        },
+        {
+          # VPCE `com.amazonaws.<region>.email` advertises `email.<region>.api.aws`
+          # (SESv2 endpoint). Boto3 default `email.<region>.amazonaws.com` is not
+          # reachable from the private ECS SG; pin to the VPCE-served hostname.
+          name: 'SES_ENDPOINT_URL',
+          value: 'https://email.ap-northeast-1.api.aws',
         },
       ],
       secrets: [

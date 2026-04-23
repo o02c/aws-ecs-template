@@ -15,4 +15,5 @@ if settings.DEBUG:
     urlpatterns += [
         path("api/test/error", views.test_error),
         path("api/test/audit", views.test_audit),
+        path("api/test/send-email", views.send_test_email),
     ]

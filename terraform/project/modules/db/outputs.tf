@@ -13,6 +13,11 @@ output "cluster_arn" {
   value       = aws_rds_cluster.this.arn
 }
 
+output "cluster_identifier" {
+  description = "Aurora cluster identifier (CloudWatch dimension)"
+  value       = aws_rds_cluster.this.cluster_identifier
+}
+
 output "cluster_resource_id" {
   description = "Aurora cluster resource ID"
   value       = aws_rds_cluster.this.cluster_resource_id

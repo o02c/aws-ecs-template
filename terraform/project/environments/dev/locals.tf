@@ -52,6 +52,29 @@ locals {
   # Signed URL path pattern (for CloudFront signing feature)
   signed_files_path_pattern = "/files/*"
 
+  # Email (SES sandbox). Set enabled = false to skip all SES / Route53 records.
+  # After apply, verify_recipients receive a confirmation email from AWS that
+  # must be clicked manually in Gmail. The domain DKIM is auto-verified.
+  email = {
+    enabled             = true
+    sender_address      = "no-reply@o2c.click"
+    mail_from_subdomain = "bounce"
+    verified_recipients = ["ohtsuka.kentaro.o2c@gmail.com"]
+    dmarc_rua_address   = "postmaster@o2c.click"
+  }
+
+  # CloudWatch Alarm → SNS → Email
+  # Recipients must confirm the SNS subscription email from AWS (Gmail manual click).
+  alarm_recipients = ["ohtsuka.kentaro.o2c@gmail.com"]
+
+  alarm_thresholds = {
+    alb_5xx_count                = 5
+    aurora_cpu_percent           = 80
+    aurora_connections           = 40
+    ecs_running_gap_evaluations  = 5 # 1min × 5 = 5min sustained
+    alb_healthy_host_evaluations = 5 # 2min × 5 = 10min sustained
+  }
+
   # Aurora PostgreSQL cluster config. Change these to tune per env.
   db_config = {
     engine_version          = "16.4"
@@ -84,6 +107,10 @@ locals {
     secrets = {
       description = "CMK for Secrets Manager encryption"
       service     = null
+    }
+    sns = {
+      description = "CMK for SNS topic encryption (CloudWatch Alarm publishes)"
+      service     = "cloudwatch.amazonaws.com"
     }
   }
 

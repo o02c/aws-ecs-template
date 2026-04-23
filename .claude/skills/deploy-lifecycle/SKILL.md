@@ -163,6 +163,11 @@ just setup                    # 再度立ち上げ
 - **`yes destroy | just destroy` は動かない**。`_confirm-destroy` recipe のインタラクティブ `read -p` がパイプ入力を受け取らず Abort する。自動実行では `bash scripts/full-destroy.sh` を直接呼ぶこと。
 - **`/aws/vpc/flow-log/<prefix>` の orphan log group**：`just shared-destroy` を単独実行した後、CloudWatch Logs が即座には削除されず次の apply で `ResourceAlreadyExistsException` を起こすケースがある。justfile の `shared-destroy` / `project-destroy` recipe に orphan 削除を入れて再発防止済み。手動 apply 直前で `aws logs delete-log-group --log-group-name /aws/vpc/flow-log/<prefix>` を叩くと確実。
 - **access-logs バケットへの log 追記は destroy 中も続く**：CloudFront / ALB / Firehose は destroy 完了直前までログを書き込みし得るので、一度の `empty_tagged_buckets` + `terraform destroy` では `BucketNotEmpty` で失敗する場合がある。対応として `full-destroy.sh` の `tf_destroy_with_retry` が **destroy 失敗時に tag-based で再度空化 → 最大 4 回リトライ** する。この仕組みがあるので `aws_s3_bucket.force_destroy` は TF 側で設定しない（prod での誤爆防止）。
+- **SES recipient verify + SNS email subscription は apply 後に Gmail で手動 confirm が必要**：
+  - `aws_ses_email_identity` / `aws_sns_topic_subscription` は verify/confirm 要求だけ投げるリソース。apply 自体は "success" 表示で完了する。
+  - AWS が送る confirmation メール（SES 1 通 + SNS topic 数だけ = `critical` と `warning` の 2 通、計 3 通）が Gmail に届くので、リンクを手動クリックして `Verified` / `Confirmed` 状態に遷移させる必要あり。
+  - 未 confirm のまま `/api/test/send-email` を叩くと SES SendEmail が 400 で弾き、未 confirm の SNS subscription は CloudWatch Alarm が発火しても silent drop。
+  - `verify-deploy.sh` に `aws ses get-identity-verification-attributes` / `aws sns list-subscriptions-by-topic --query 'Subscriptions[].SubscriptionArn'` の確認ステップを入れている。PendingConfirmation のままなら WARN で知らせる。
 
 ## 9. 参考
 

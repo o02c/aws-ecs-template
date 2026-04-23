@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -16,9 +17,21 @@ CLOUDFRONT_DOMAIN = os.environ.get("CLOUDFRONT_DOMAIN", "")
 S3_FILES_PREFIX = os.environ.get("S3_FILES_PREFIX", "files")
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 
+SES_FROM_ADDRESS = os.environ.get("SES_FROM_ADDRESS", "")
+SES_ALLOWED_RECIPIENTS = {
+    r.strip() for r in os.environ.get("SES_ALLOWED_RECIPIENTS", "").split(",") if r.strip()
+}
+# VPCE for com.amazonaws.<region>.email serves email.<region>.api.aws (SESv2 endpoint).
+# Default boto3 SES v1 hostname email.<region>.amazonaws.com isn't reachable from
+# private ECS tasks, so we use sesv2 with the api.aws endpoint.
+SES_ENDPOINT_URL = os.environ.get("SES_ENDPOINT_URL") or None
+MAX_EMAIL_BODY = 2000
+MAX_EMAIL_SUBJECT = 200
+
 EXT_PATTERN = re.compile(r"^\.[a-zA-Z0-9]{1,10}$")
 
 s3 = boto3.client("s3")
+ses = boto3.client("sesv2", endpoint_url=SES_ENDPOINT_URL)
 
 
 @require_GET
@@ -107,3 +120,48 @@ def test_audit(request):
         },
     )
     return JsonResponse({"logged": True, "check": "Firehose/S3 for audit entry"})
+
+
+@csrf_exempt
+@require_POST
+def send_test_email(request):
+    """Sends a test email via SES. Guarded by DEBUG + allowlist + size caps.
+
+    POST body: {"to": "...", "subject": "...", "body": "..."}
+    Recipient must be in SES_ALLOWED_RECIPIENTS env (populated from TF verified_recipients).
+    """
+    if not SES_FROM_ADDRESS:
+        return JsonResponse({"error": "SES not configured"}, status=503)
+
+    try:
+        payload = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    to = (payload.get("to") or "").strip()
+    subject = (payload.get("subject") or "Test")[:MAX_EMAIL_SUBJECT]
+    body = (payload.get("body") or "ping")[:MAX_EMAIL_BODY]
+
+    if to not in SES_ALLOWED_RECIPIENTS:
+        return JsonResponse({"error": "Recipient not allowlisted"}, status=400)
+
+    response = ses.send_email(
+        FromEmailAddress=SES_FROM_ADDRESS,
+        Destination={"ToAddresses": [to]},
+        Content={
+            "Simple": {
+                "Subject": {"Data": subject, "Charset": "UTF-8"},
+                "Body": {"Text": {"Data": body, "Charset": "UTF-8"}},
+            },
+        },
+    )
+    audit_logger.info(
+        "Email sent",
+        extra={
+            "type": "audit",
+            "action": "email_send",
+            "to": to,
+            "message_id": response["MessageId"],
+        },
+    )
+    return JsonResponse({"message_id": response["MessageId"]})

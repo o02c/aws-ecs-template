@@ -67,3 +67,22 @@ output "firehose_stream_names" {
   description = "Map of firehose stream kind (audit / ecs-logs) to stream name"
   value       = module.app.firehose_stream_names
 }
+
+# --------------------------------------------------------------------------------
+# SES (consumed by ECS task def env vars)
+# --------------------------------------------------------------------------------
+
+output "ses_sender_address" {
+  description = "Default sender address for SES SendEmail (empty if email disabled)"
+  value       = local.email.enabled ? one([for _, m in module.email : m.sender_address]) : ""
+}
+
+output "ses_verified_recipients_csv" {
+  description = "Comma-separated list of verified recipients for the app's allowlist (empty if email disabled)"
+  value       = local.email.enabled ? join(",", local.email.verified_recipients) : ""
+}
+
+output "sns_alarm_topic_arns" {
+  description = "Map of severity to SNS alarm topic ARN"
+  value       = module.monitoring.topic_arns
+}

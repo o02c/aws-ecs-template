@@ -246,3 +246,19 @@ resource "aws_iam_role_policy_attachment" "task_secrets_read" {
   role       = aws_iam_role.task[each.key].name
   policy_arn = aws_iam_policy.secrets_read["default"].arn
 }
+
+# --------------------------------------------------------------------------------
+# SES Send Policy Attachment (feature-flagged)
+# --------------------------------------------------------------------------------
+# When the email module is disabled, email_policy_arn == "" and no attachment
+# is created. The email module itself owns the policy (scoped to the SES
+# domain identity) — we only attach it to each task role here.
+
+resource "aws_iam_role_policy_attachment" "task_email" {
+  # email_enabled is a plan-time bool so for_each is known at plan time.
+  # policy_arn itself may be known only after apply (module.email output).
+  for_each = var.email_enabled ? var.services : {}
+
+  role       = aws_iam_role.task[each.key].name
+  policy_arn = var.email_policy_arn
+}

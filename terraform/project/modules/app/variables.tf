@@ -109,3 +109,13 @@ variable "log_bucket_id" {
   description = "Shared access-log S3 bucket ID (owns audit/ + ecs-logs/ prefixes)"
   type        = string
 }
+
+variable "email_enabled" {
+  description = "Plan-time flag: whether to attach the SES policy to task roles. policy_arn may be apply-time known."
+  type        = bool
+}
+
+variable "email_policy_arn" {
+  description = "IAM policy ARN for SES send (consumed only when email_enabled = true)"
+  type        = string
+}

@@ -28,7 +28,7 @@ echo "=== Verify Deploy: ${PROJECT_NAME}-${ENVIRONMENT} @ ${DOMAIN_NAME} ==="
 # 1. HTTPS health check (all lanes)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [1/6] HTTPS Health ---"
+echo "--- [1/8] HTTPS Health ---"
 for lane in "${LANES[@]}"; do
   url="https://${lane}.${DOMAIN_NAME}/health"
   code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
@@ -43,7 +43,7 @@ done
 # 2. TLS / cert hygiene
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [2/6] TLS / Certificate ---"
+echo "--- [2/8] TLS / Certificate ---"
 for lane in "${LANES[@]}"; do
   host="${lane}.${DOMAIN_NAME}"
   tls_info=$(echo | openssl s_client -connect "${host}:443" -servername "${host}" -brief 2>&1 | grep -E 'Protocol version|Ciphersuite|Verification' || true)
@@ -69,7 +69,7 @@ done
 # 3. Generate traffic to populate log destinations
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [3/6] Generate traffic (3 requests per lane) ---"
+echo "--- [3/8] Generate traffic (3 requests per lane) ---"
 for lane in "${LANES[@]}"; do
   for _ in 1 2 3; do
     curl -sSk --max-time 10 "https://${lane}.${DOMAIN_NAME}/health" > /dev/null 2>&1 || true
@@ -82,7 +82,7 @@ sleep 120
 # 4. CloudWatch Logs destinations (infra-level only — ECS logs go to S3)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [4/6] CloudWatch Logs (VPC flow + WAF only) ---"
+echo "--- [4/8] CloudWatch Logs (VPC flow + WAF only) ---"
 
 check_cw_group_has_events() {
   local region="$1" lg="$2" label="$3"
@@ -113,7 +113,7 @@ done
 # 5. S3 Log Destinations (all logs land in the single access-log bucket)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [5/6] S3 Log Destinations (single bucket, prefix-separated) ---"
+echo "--- [5/8] S3 Log Destinations (single bucket, prefix-separated) ---"
 
 check_s3_prefix() {
   local bucket="$1" prefix="$2" label="$3" mandatory="${4:-1}"
@@ -151,7 +151,7 @@ check_s3_prefix "$ACCESS_LOG_BUCKET" "fluent-bit/" "FireLens config" 0
 # 6. Bucket / log group security posture (spot checks)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [6/6] Security Posture Spot Checks ---"
+echo "--- [6/8] Security Posture Spot Checks ---"
 
 for b in "$ACCESS_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets" "${PROJECT_NAME}-${ENVIRONMENT}-admin-assets"; do
   pab=$(aws s3api get-public-access-block --bucket "$b" --query 'PublicAccessBlockConfiguration' --output json 2>/dev/null || echo "{}")
@@ -170,6 +170,81 @@ for b in "$ACCESS_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets"; do
     warn "SSL-only policy MISSING: ${b}"
   fi
 done
+
+# --------------------------------------------------------------------------------
+# 7. SES / SNS subscription state (pending manual Gmail confirm)
+# --------------------------------------------------------------------------------
+echo ""
+echo "--- [7/8] SES identity + SNS subscription state ---"
+
+# Domain identity DKIM verification — iterate all domain identities
+while IFS= read -r domain; do
+  [ -z "$domain" ] && continue
+  dkim_state=$(aws ses get-identity-dkim-attributes --identities "$domain" \
+    --query "DkimAttributes.\"${domain}\".DkimVerificationStatus" --output text 2>/dev/null || echo "UNKNOWN")
+  case "$dkim_state" in
+    Success) ok "SES DKIM verified: ${domain}" ;;
+    Pending) warn "SES DKIM still pending (usually finishes <10min after apply): ${domain}" ;;
+    *)       warn "SES DKIM state=${dkim_state} (check Route53 records): ${domain}" ;;
+  esac
+done <<< "$(aws ses list-identities --identity-type Domain --query 'Identities[]' --output text 2>/dev/null | tr '\t' '\n')"
+
+# Email identity verification — iterate all verified addresses
+while IFS= read -r recipient; do
+  [ -z "$recipient" ] && continue
+  state=$(aws ses get-identity-verification-attributes --identities "$recipient" \
+    --query "VerificationAttributes.\"${recipient}\".VerificationStatus" --output text 2>/dev/null || echo "UNKNOWN")
+  case "$state" in
+    Success) ok "SES recipient verified: ${recipient}" ;;
+    Pending) warn "SES recipient Pending — click the confirmation link in Gmail: ${recipient}" ;;
+    *)       warn "SES recipient state=${state}: ${recipient}" ;;
+  esac
+done <<< "$(aws ses list-identities --identity-type EmailAddress --query 'Identities[]' --output text 2>/dev/null | tr '\t' '\n')"
+
+# SNS alarm topic subscriptions
+for sev in critical warning; do
+  topic_arn="arn:aws:sns:${AWS_REGION}:${ACCOUNT_ID}:${PROJECT_NAME}-${ENVIRONMENT}-alert-${sev}"
+  subs=$(aws sns list-subscriptions-by-topic --topic-arn "$topic_arn" \
+    --query 'Subscriptions[].[SubscriptionArn,Endpoint]' --output text 2>/dev/null || echo "")
+  if [ -z "$subs" ]; then
+    warn "SNS topic has no subscriptions: ${topic_arn}"
+    continue
+  fi
+  while IFS=$'\t' read -r sub_arn endpoint; do
+    [ -z "$sub_arn" ] && continue
+    if [ "$sub_arn" = "PendingConfirmation" ]; then
+      warn "SNS ${sev} subscription PendingConfirmation: ${endpoint} (click Gmail link)"
+    else
+      ok "SNS ${sev} subscription confirmed: ${endpoint}"
+    fi
+  done <<< "$subs"
+done
+
+# --------------------------------------------------------------------------------
+# 8. CloudWatch Alarm inventory
+# --------------------------------------------------------------------------------
+echo ""
+echo "--- [8/8] CloudWatch Alarms ---"
+
+alarm_names=$(aws cloudwatch describe-alarms \
+  --alarm-name-prefix "${PROJECT_NAME}-${ENVIRONMENT}-" \
+  --query 'MetricAlarms[].[AlarmName,StateValue]' \
+  --output text 2>/dev/null)
+
+if [ -z "$alarm_names" ]; then
+  fail "No CloudWatch Alarms found with prefix ${PROJECT_NAME}-${ENVIRONMENT}-"
+else
+  alarm_count=$(echo "$alarm_names" | wc -l | tr -d ' ')
+  ok "${alarm_count} alarms registered"
+  # Show alarms currently in ALARM state (post-deploy, typically OK or INSUFFICIENT_DATA)
+  in_alarm=$(echo "$alarm_names" | awk '$2 == "ALARM" {print $1}')
+  if [ -n "$in_alarm" ]; then
+    while IFS= read -r name; do
+      [ -z "$name" ] && continue
+      warn "Alarm in ALARM state: ${name}"
+    done <<< "$in_alarm"
+  fi
+fi
 
 echo ""
 if [ "$FAILED" -eq 0 ]; then

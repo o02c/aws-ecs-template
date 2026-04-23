@@ -45,6 +45,7 @@ locals {
     sts            = { service = "com.amazonaws.${local.aws_region}.sts", wildcard = false }
     ssm            = { service = "com.amazonaws.${local.aws_region}.ssm", wildcard = false }
     secretsmanager = { service = "com.amazonaws.${local.aws_region}.secretsmanager", wildcard = false }
+    email          = { service = "com.amazonaws.${local.aws_region}.email", wildcard = false }
   }
 
   # Project VPC CIDRs for TGW return routes
