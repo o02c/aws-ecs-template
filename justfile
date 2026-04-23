@@ -111,9 +111,10 @@ shared-apply: shared-init
 shared-apply-auto: shared-init
     terraform -chdir=terraform/shared/environments/{{environment}} apply -auto-approve
 
-# Destroy shared infrastructure
+# Destroy shared infrastructure (+ orphan VPC flow log group cleanup)
 shared-destroy:
-    terraform -chdir=terraform/shared/environments/{{environment}} destroy -auto-approve
+    terraform -chdir=terraform/shared/environments/{{environment}} destroy -auto-approve -refresh=false
+    -aws logs delete-log-group --log-group-name "/aws/vpc/flow-log/shared-{{environment}}" 2>/dev/null || true
 
 # --------------------------------------------------------------------------------
 # Terraform - Project
@@ -135,9 +136,12 @@ project-apply: project-init
 project-apply-auto: project-init
     terraform -chdir=terraform/project/environments/{{environment}} apply -auto-approve
 
-# Destroy project infrastructure
+# Destroy project infrastructure (+ orphan log group cleanup)
 project-destroy:
     terraform -chdir=terraform/project/environments/{{environment}} destroy -auto-approve
+    -aws logs delete-log-group --log-group-name "/aws/vpc/flow-log/{{project_name}}-{{environment}}" 2>/dev/null || true
+    -for svc in user-api admin-api; do aws logs delete-log-group --log-group-name "/ecs/{{project_name}}-{{environment}}/$svc" 2>/dev/null || true; done
+    -for lane in user admin; do aws logs delete-log-group --region us-east-1 --log-group-name "aws-waf-logs-{{project_name}}-{{environment}}-$lane" 2>/dev/null || true; done
 
 # --------------------------------------------------------------------------------
 # Docker Build & Push
@@ -293,12 +297,16 @@ s3-empty:
 # Utility
 # --------------------------------------------------------------------------------
 
-# Check connectivity for all lanes
+# Simple HTTPS health check (both lanes)
 check:
     @echo "--- user ---"
     @curl -sf https://user.{{domain_name}}/health && echo ""
     @echo "--- admin ---"
     @curl -sf https://admin.{{domain_name}}/health && echo ""
+
+# Full verify: HTTPS, TLS, every log destination, bucket posture
+verify-deploy:
+    bash scripts/verify-deploy.sh
 
 # Generate CloudFront signing keypair
 generate-signing-keypair:

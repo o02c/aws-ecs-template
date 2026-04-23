@@ -52,10 +52,12 @@ resource "aws_iam_role_policy" "codebuild" {
         Resource = "${aws_s3_bucket.artifact.arn}/*"
       },
       {
-        Effect = "Allow"
-        Action = [
-          "ecr:GetAuthorizationToken"
-        ]
+        # ecr:GetAuthorizationToken does not support resource-level permissions.
+        # AWS docs explicitly require Resource="*". The action only returns a
+        # temporary token scoped to the caller's account, so blast radius is
+        # account-local. Accepted deviation from security_prohibitions.md 2.2.26-7.
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
         Resource = "*"
       },
       {
@@ -87,12 +89,15 @@ resource "aws_iam_role_policy" "codebuild" {
         Resource = "arn:aws:ecs:*:${data.aws_caller_identity.current.account_id}:service/${var.project_name}-${var.environment}/*"
       },
       {
+        # ecs:DescribeTaskDefinition and ecs:RegisterTaskDefinition do not support
+        # resource-level permissions (AWS service limitation). Task definitions
+        # are account-local metadata; tag-based conditions could further scope in
+        # the future. Accepted deviation from security_prohibitions.md 2.2.26-7.
         Effect = "Allow"
         Action = [
           "ecs:DescribeTaskDefinition",
-          "ecs:RegisterTaskDefinition"
+          "ecs:RegisterTaskDefinition",
         ]
-        # RegisterTaskDefinition does not support resource-level permissions
         Resource = "*"
       },
       {

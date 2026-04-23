@@ -14,7 +14,7 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "this" {
   subnet_ids         = [for s in aws_subnet.private : s.id]
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-tgw-attach"
+    Name = "${var.project_name}-${var.environment}"
   }
 }
 

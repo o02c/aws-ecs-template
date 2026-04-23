@@ -1,39 +1,28 @@
 # --------------------------------------------------------------------------------
-# Service Domain Mapping
+# Data Sources
 # --------------------------------------------------------------------------------
 
+# Use the actually-created endpoints (not the input var) as the for_each basis.
+# If endpoints are ever filtered/disabled, data sources follow automatically.
+# For some services (e.g. ECR DKR) private_dns_name has a leading "*." which
+# Route53 zones don't allow — strip it for the zone and add a wildcard record.
+data "aws_vpc_endpoint_service" "interface" {
+  for_each = aws_vpc_endpoint.interface
+
+  service_name = each.value.service_name
+}
+
 locals {
-  # Map endpoint identifier to the actual DNS domain name for each AWS service
-  endpoint_dns_domains = {
-    for key, service_name in var.interface_endpoints : key => lookup(
-      {
-        "ecr.api"          = "api.ecr"
-        "ecr.dkr"          = "dkr.ecr"
-        "logs"             = "logs"
-        "kinesis-firehose"  = "firehose"
-        "sts"              = "sts"
-        "ssm"              = "ssm"
-        "secretsmanager"   = "secretsmanager"
-      },
-      # Extract service suffix from "com.amazonaws.<region>.<service>"
-      join(".", slice(split(".", service_name), 3, length(split(".", service_name)))),
-      join(".", slice(split(".", service_name), 3, length(split(".", service_name))))
-    )
+  endpoint_zone_names = {
+    for key in keys(aws_vpc_endpoint.interface) : key =>
+    trimprefix(data.aws_vpc_endpoint_service.interface[key].private_dns_name, "*.")
   }
 
-  # Extract region from service name: "com.amazonaws.<region>.<service>"
-  endpoint_region = length(var.interface_endpoints) > 0 ? split(".", values(var.interface_endpoints)[0])[2] : ""
-
-  # Full domain for each endpoint
-  endpoint_phz_domains = {
-    for key, domain_prefix in local.endpoint_dns_domains : key =>
-    "${domain_prefix}.${local.endpoint_region}.amazonaws.com"
-  }
-
-  # ECR DKR needs wildcard record
-  ecr_dkr_endpoints = {
-    for key, _ in var.interface_endpoints : key => key
-    if local.endpoint_dns_domains[key] == "dkr.ecr"
+  # Wildcard filter comes from var (plan-time known) so downstream for_each
+  # on this local doesn't depend on apply-time data.
+  wildcard_endpoints = {
+    for key, cfg in var.interface_endpoints : key => true
+    if cfg.wildcard
   }
 }
 
@@ -42,9 +31,9 @@ locals {
 # --------------------------------------------------------------------------------
 
 resource "aws_route53_zone" "endpoint" {
-  for_each = var.interface_endpoints
+  for_each = aws_vpc_endpoint.interface
 
-  name = local.endpoint_phz_domains[each.key]
+  name = local.endpoint_zone_names[each.key]
 
   vpc {
     vpc_id = aws_vpc.this.id
@@ -55,19 +44,19 @@ resource "aws_route53_zone" "endpoint" {
   }
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-shared-${each.key}-phz"
+    Name = "${var.project_name}-${var.environment}-${each.key}"
   }
 }
 
 # --------------------------------------------------------------------------------
-# ALIAS Records for Interface Endpoints
+# Alias Records for Interface Endpoints
 # --------------------------------------------------------------------------------
 
 resource "aws_route53_record" "endpoint" {
-  for_each = var.interface_endpoints
+  for_each = aws_vpc_endpoint.interface
 
   zone_id = aws_route53_zone.endpoint[each.key].zone_id
-  name    = local.endpoint_phz_domains[each.key]
+  name    = local.endpoint_zone_names[each.key]
   type    = "A"
 
   alias {
@@ -77,12 +66,13 @@ resource "aws_route53_record" "endpoint" {
   }
 }
 
-# ECR DKR needs wildcard record: *.dkr.ecr.<region>.amazonaws.com
-resource "aws_route53_record" "endpoint_dkr_wildcard" {
-  for_each = local.ecr_dkr_endpoints
+# Wildcard record for services that advertise their private DNS with "*." prefix
+# (e.g. ECR DKR serves images from *.dkr.ecr.<region>.amazonaws.com).
+resource "aws_route53_record" "endpoint_wildcard" {
+  for_each = local.wildcard_endpoints
 
   zone_id = aws_route53_zone.endpoint[each.key].zone_id
-  name    = "*.${local.endpoint_phz_domains[each.key]}"
+  name    = "*.${local.endpoint_zone_names[each.key]}"
   type    = "A"
 
   alias {

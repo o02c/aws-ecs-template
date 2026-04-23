@@ -29,6 +29,7 @@ module "kms" {
   environment    = var.environment
   aws_account_id = data.aws_caller_identity.current.account_id
   aws_region     = local.aws_region
+  keys           = local.kms_keys
 }
 
 # --------------------------------------------------------------------------------
@@ -38,10 +39,11 @@ module "kms" {
 module "logging" {
   source = "../../modules/logging"
 
-  project_name   = var.project_name
-  environment    = var.environment
-  region         = local.aws_region
-  aws_account_id = data.aws_caller_identity.current.account_id
+  project_name         = var.project_name
+  environment          = var.environment
+  region               = local.aws_region
+  aws_account_id       = data.aws_caller_identity.current.account_id
+  access_log_lifecycle = local.access_log_lifecycle
 }
 
 # --------------------------------------------------------------------------------
@@ -60,6 +62,7 @@ module "network" {
   shared_endpoint_phz_zone_ids = data.terraform_remote_state.shared.outputs.endpoint_phz_zone_ids
   transit_gateway_id           = local.transit_gateway_id
   kms_key_arn                  = module.kms.key_arns["logs"]
+  flow_log_retention_days      = local.flow_log_retention_days
 }
 
 # --------------------------------------------------------------------------------
@@ -79,8 +82,7 @@ module "db" {
   master_username = var.db_master_username
   kms_key_arn     = module.kms.key_arns["rds"]
 
-  deletion_protection = false
-  skip_final_snapshot = true
+  db_config = local.db_config
 }
 
 # --------------------------------------------------------------------------------
@@ -99,6 +101,9 @@ module "lb" {
   alb_security_group_id = module.network.security_group_ids["${each.key}-alb"]
   ecs_security_group_id = module.network.security_group_ids["ecs"]
   acm_certificate_arn   = module.dns.regional_certificate_arn
+  idle_timeout_seconds  = local.alb_idle_timeout_seconds
+  container_port        = local.container_port
+  target_group          = local.lb_target_group
   log_bucket_id         = module.logging.bucket_id
   log_prefix            = "alb/${each.key}"
 }
@@ -134,12 +139,12 @@ module "app" {
   alb_security_group_ids = {
     for lane in keys(local.lanes) : lane => module.network.security_group_ids["${lane}-alb"]
   }
-  db_security_group_id = module.network.security_group_ids["db"]
+  db_security_group_id        = module.network.security_group_ids["db"]
   shared_private_subnet_cidrs = data.terraform_remote_state.shared.outputs.shared_private_subnet_cidrs
-  s3_prefix_list_id    = module.network.s3_prefix_list_id
-  db_cluster_arn         = module.db.cluster_arn
-  db_resource_id         = module.db.cluster_resource_id
-  services               = local.services
+  s3_prefix_list_id           = module.network.s3_prefix_list_id
+  db_cluster_arn              = module.db.cluster_arn
+  db_resource_id              = module.db.cluster_resource_id
+  services                    = local.services
   s3_bucket_arns = {
     for lane, mod in module.storage : lane => mod.bucket_arn
   }
@@ -147,11 +152,13 @@ module "app" {
   s3_access_policy_arns = {
     for lane, mod in module.storage : lane => mod.s3_access_policy_arn
   }
-  cloudfront_signing_key_secret_arn = var.cloudfront_signing_key_secret_arn
-  logs_kms_key_arn                  = module.kms.key_arns["logs"]
-  aws_account_id                    = data.aws_caller_identity.current.account_id
-  s3_kms_key_arn                    = module.kms.key_arns["s3"]
-  log_bucket_id                     = module.logging.bucket_id
+  cloudfront_signing_key_secret_arn   = var.cloudfront_signing_key_secret_arn
+  logs_kms_key_arn                    = module.kms.key_arns["logs"]
+  aws_account_id                      = data.aws_caller_identity.current.account_id
+  s3_kms_key_arn                      = module.kms.key_arns["s3"]
+  log_bucket_id                       = module.logging.bucket_id
+  container_port                      = local.container_port
+  firehose_buffering_interval_seconds = local.firehose_buffering_interval_seconds
 }
 
 # --------------------------------------------------------------------------------
@@ -181,6 +188,11 @@ module "cdn" {
   route53_zone_id                = module.dns.zone_id
   enable_signing                 = nonsensitive(var.cloudfront_signing_public_key_pem != "")
   signing_public_key_pem         = var.cloudfront_signing_public_key_pem
+  files_path_pattern             = local.signed_files_path_pattern
+  waf_rate_limit                 = local.waf_rate_limit
+  geo_restriction_locations      = local.geo_restriction_locations
+  cache_ttl                      = local.cache_ttl
+  waf_log_retention_days         = local.waf_log_retention_days
   log_bucket_domain_name         = module.logging.bucket_domain_name
   log_prefix                     = "cloudfront/${each.key}/"
   vpc_id                         = module.network.vpc_id
@@ -194,10 +206,9 @@ module "cdn" {
 module "dns" {
   source = "../../modules/dns"
 
-  project_name        = var.project_name
-  environment         = var.environment
-  domain_name         = var.domain_name
-  manage_registrar_ns = true
+  project_name = var.project_name
+  environment  = var.environment
+  domain_name  = var.domain_name
 }
 
 # --------------------------------------------------------------------------------

@@ -17,11 +17,6 @@ output "task_role_arns" {
   value       = module.app.task_role_arns
 }
 
-output "log_group_names" {
-  description = "Map of service name to CloudWatch log group name"
-  value       = module.app.log_group_names
-}
-
 output "target_group_arns" {
   description = "Map of lane to target group ARN"
   value       = { for lane, lb in module.lb : lane => lb.target_group_arn }
@@ -68,12 +63,7 @@ output "lane_domains" {
   value       = { for lane, _ in local.lanes : lane => "${lane}.${var.domain_name}" }
 }
 
-output "audit_log_bucket_id" {
-  description = "Audit log S3 bucket ID"
-  value       = module.app.audit_log_bucket_id
-}
-
-output "firehose_delivery_stream_name" {
-  description = "Firehose delivery stream name for audit logs"
-  value       = module.app.firehose_delivery_stream_name
+output "firehose_stream_names" {
+  description = "Map of firehose stream kind (audit / ecs-logs) to stream name"
+  value       = module.app.firehose_stream_names
 }

@@ -46,7 +46,6 @@ variable "acm_certificate_arn" {
 variable "aliases" {
   description = "List of domain aliases for CloudFront distribution"
   type        = list(string)
-  default     = []
 }
 
 variable "domain_name" {
@@ -62,31 +61,26 @@ variable "route53_zone_id" {
 variable "enable_signing" {
   description = "Enable CloudFront signed URL support"
   type        = bool
-  default     = false
 }
 
 variable "signing_public_key_pem" {
-  description = "PEM-encoded public key for CloudFront signed URLs"
+  description = "PEM-encoded public key for CloudFront signed URLs (empty when signing disabled)"
   type        = string
-  default     = ""
 }
 
 variable "files_path_pattern" {
   description = "Path pattern for signed file delivery"
   type        = string
-  default     = "/files/*"
 }
 
 variable "waf_rate_limit" {
   description = "Maximum number of requests per 5-minute period per IP"
   type        = number
-  default     = 2000
 }
 
 variable "geo_restriction_locations" {
   description = "List of ISO 3166-1 alpha-2 country codes for CloudFront geo restriction whitelist"
   type        = list(string)
-  default     = ["JP"]
 }
 
 variable "log_bucket_domain_name" {
@@ -107,4 +101,17 @@ variable "vpc_id" {
 variable "alb_security_group_id" {
   description = "ALB security group ID to add CloudFront VPC Origin ingress rule"
   type        = string
+}
+
+variable "cache_ttl" {
+  description = "Static-assets cache TTL (default and max, in seconds)"
+  type = object({
+    default_seconds = number
+    max_seconds     = number
+  })
+}
+
+variable "waf_log_retention_days" {
+  description = "WAF log group retention in days"
+  type        = number
 }

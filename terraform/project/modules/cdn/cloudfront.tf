@@ -31,7 +31,7 @@ resource "aws_cloudfront_vpc_origin" "alb" {
   }
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-${var.lane}-alb-origin"
+    Name = "${var.project_name}-${var.environment}-${var.lane}-alb"
   }
 }
 
@@ -42,8 +42,8 @@ resource "aws_cloudfront_vpc_origin" "alb" {
 resource "aws_cloudfront_cache_policy" "static" {
   name        = "${var.project_name}-${var.environment}-${var.lane}-static"
   comment     = "Cache policy for ${var.lane} static assets"
-  default_ttl = 86400
-  max_ttl     = 31536000
+  default_ttl = var.cache_ttl.default_seconds
+  max_ttl     = var.cache_ttl.max_seconds
   min_ttl     = 0
 
   parameters_in_cache_key_and_forwarded_to_origin {

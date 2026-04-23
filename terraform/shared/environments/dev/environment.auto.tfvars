@@ -1,3 +1,2 @@
-project_name = "myapp"
+project_name = "shared"
 environment  = "dev"
-domain_name  = "o2c.click"

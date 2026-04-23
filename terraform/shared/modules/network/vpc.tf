@@ -8,7 +8,7 @@ resource "aws_vpc" "this" {
   enable_dns_hostnames = true
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-shared-vpc"
+    Name = "${var.project_name}-${var.environment}"
   }
 }
 

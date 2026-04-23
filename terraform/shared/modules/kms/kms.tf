@@ -24,14 +24,14 @@ resource "aws_kms_key" "this" {
   policy                  = data.aws_iam_policy_document.key[each.key].json
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-shared-${each.key}"
+    Name = "${var.project_name}-${var.environment}-${each.key}"
   }
 }
 
 resource "aws_kms_alias" "this" {
   for_each = local.keys
 
-  name          = "alias/${var.project_name}-${var.environment}-shared-${each.key}"
+  name          = "alias/${var.project_name}-${var.environment}-${each.key}"
   target_key_id = aws_kms_key.this[each.key].key_id
 }
 

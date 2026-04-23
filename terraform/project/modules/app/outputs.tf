@@ -23,11 +23,6 @@ output "task_role_arns" {
   value       = { for name, role in aws_iam_role.task : name => role.arn }
 }
 
-output "log_group_names" {
-  description = "Map of service to CloudWatch log group name"
-  value       = { for name, lg in aws_cloudwatch_log_group.this : name => lg.name }
-}
-
 output "nginx_ecr_repository_url" {
   description = "nginx ECR repository URL"
   value       = aws_ecr_repository.nginx.repository_url
@@ -40,17 +35,12 @@ output "fluent_bit_init_image" {
 
 output "fluent_bit_config_s3_arn" {
   description = "S3 ARN of Fluent Bit extra config for init process"
-  value       = "arn:aws:s3:::${aws_s3_bucket.audit_logs.id}/${aws_s3_object.fluent_bit_config.key}"
+  value       = "arn:aws:s3:::${var.log_bucket_id}/${aws_s3_object.fluent_bit_config.key}"
 }
 
-output "audit_log_bucket_id" {
-  description = "Audit log S3 bucket ID"
-  value       = aws_s3_bucket.audit_logs.id
-}
-
-output "firehose_delivery_stream_name" {
-  description = "Firehose delivery stream name for audit logs"
-  value       = aws_kinesis_firehose_delivery_stream.audit_logs.name
+output "firehose_stream_names" {
+  description = "Map of firehose stream kind (audit / ecs-logs) to stream name"
+  value       = { for k, s in aws_kinesis_firehose_delivery_stream.this : k => s.name }
 }
 
 output "ssm_parameter_arns" {

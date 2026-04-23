@@ -1,30 +1,11 @@
 # --------------------------------------------------------------------------------
-# KMS Customer Managed Keys
+# KMS Customer Managed Keys (project)
 # --------------------------------------------------------------------------------
-
-locals {
-  keys = {
-    rds = {
-      description = "CMK for Aurora encryption"
-      service     = null
-    }
-    s3 = {
-      description = "CMK for S3 bucket encryption"
-      service     = null
-    }
-    logs = {
-      description = "CMK for CloudWatch Logs encryption"
-      service     = "logs.${var.aws_region}.amazonaws.com"
-    }
-    secrets = {
-      description = "CMK for Secrets Manager encryption"
-      service     = null
-    }
-  }
-}
+# Keys are defined in environments/<env>/locals.tf and passed via var.keys.
+# shared 側の同名 key とは state 境界が違うため別物（terraform-conventions §8）。
 
 resource "aws_kms_key" "this" {
-  for_each = local.keys
+  for_each = var.keys
 
   description             = each.value.description
   enable_key_rotation     = true
@@ -37,7 +18,7 @@ resource "aws_kms_key" "this" {
 }
 
 resource "aws_kms_alias" "this" {
-  for_each = local.keys
+  for_each = var.keys
 
   name          = "alias/${var.project_name}-${var.environment}-${each.key}"
   target_key_id = aws_kms_key.this[each.key].key_id
@@ -48,7 +29,7 @@ resource "aws_kms_alias" "this" {
 # --------------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "key" {
-  for_each = local.keys
+  for_each = var.keys
 
   # Allow account root full access
   statement {

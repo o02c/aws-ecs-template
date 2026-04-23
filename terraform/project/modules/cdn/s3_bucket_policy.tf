@@ -1,8 +1,9 @@
 # --------------------------------------------------------------------------------
-# S3 Bucket Policy for CloudFront OAC
+# S3 Bucket Policy (CloudFront OAC + SSL enforcement)
 # --------------------------------------------------------------------------------
+# A bucket can only have one aws_s3_bucket_policy; merge both statements here.
 
-resource "aws_s3_bucket_policy" "cloudfront_oac" {
+resource "aws_s3_bucket_policy" "this" {
   bucket = var.s3_bucket_id
 
   policy = jsonencode({
@@ -21,7 +22,22 @@ resource "aws_s3_bucket_policy" "cloudfront_oac" {
             "AWS:SourceArn" = aws_cloudfront_distribution.this.arn
           }
         }
-      }
+      },
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          "arn:aws:s3:::${var.s3_bucket_id}",
+          "arn:aws:s3:::${var.s3_bucket_id}/*",
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      },
     ]
   })
 }

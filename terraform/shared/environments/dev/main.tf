@@ -15,6 +15,7 @@ module "kms" {
   environment    = var.environment
   aws_account_id = data.aws_caller_identity.current.account_id
   aws_region     = local.aws_region
+  keys           = local.kms_keys
 }
 
 # --------------------------------------------------------------------------------
@@ -24,15 +25,16 @@ module "kms" {
 module "network" {
   source = "../../modules/network"
 
-  project_name      = var.project_name
-  environment       = var.environment
-  vpc_cidr          = local.vpc_cidr
-  public_subnets    = local.public_subnets
-  private_subnets   = local.private_subnets
-  project_vpc_cidrs   = local.project_vpc_cidrs
-  gateway_endpoints   = local.gateway_endpoints
-  interface_endpoints = local.interface_endpoints
-  kms_key_arn         = module.kms.key_arns["logs"]
+  project_name            = var.project_name
+  environment             = var.environment
+  vpc_cidr                = local.vpc_cidr
+  public_subnets          = local.public_subnets
+  private_subnets         = local.private_subnets
+  project_vpc_cidrs       = local.project_vpc_cidrs
+  gateway_endpoints       = local.gateway_endpoints
+  interface_endpoints     = local.interface_endpoints
+  kms_key_arn             = module.kms.key_arns["logs"]
+  flow_log_retention_days = local.flow_log_retention_days
 }
 
 # --------------------------------------------------------------------------------
@@ -42,6 +44,7 @@ module "network" {
 module "iam" {
   source = "../../modules/iam"
 
-  users  = local.iam_users
-  groups = local.iam_groups
+  project_name = var.project_name
+  environment  = var.environment
+  users        = local.iam_users
 }

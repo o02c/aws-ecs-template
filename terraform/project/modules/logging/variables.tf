@@ -17,3 +17,11 @@ variable "aws_account_id" {
   description = "AWS account ID for globally unique bucket naming"
   type        = string
 }
+
+variable "access_log_lifecycle" {
+  description = "Access-log bucket lifecycle: days until GLACIER transition and expiration"
+  type = object({
+    transition_days = number
+    expiration_days = number
+  })
+}

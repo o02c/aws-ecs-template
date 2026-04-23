@@ -1,37 +1,43 @@
 {
+  volumes: [
+    { name: 'app-tmp' },
+    { name: 'nginx-cache' },
+    { name: 'nginx-run' },
+    { name: 'nginx-tmp' },
+  ],
   containerDefinitions: [
-    // FireLens log router (init-latest via ECR pull-through cache)
-    // ref: https://github.com/aws/aws-for-fluent-bit/blob/mainline/use_cases/init-process-for-fluent-bit/README.md
-    // ref: https://docs.aws.amazon.com/AmazonECR/latest/userguide/pull-through-cache.html
+    // FireLens log router.
+    // NOTE: readonlyRootFilesystem OFF — init process writes to /fluent-bit/etc.
+    // logConfiguration uses awslogs (fluent-bit can't route its own output via
+    // FireLens). Short retention, trivial volume — diagnostic only.
     {
       name: 'log_router',
       image: "{{ tfstate `output.fluent_bit_init_image` }}",
       essential: true,
+      stopTimeout: 30,
       firelensConfiguration: {
         type: 'fluentbit',
       },
       environment: [
-        // init process: S3 config + built-in parsers (auto-detected via -R flag)
         { name: 'aws_fluent_bit_init_s3_1', value: "{{ tfstate `output.fluent_bit_config_s3_arn` }}" },
         { name: 'aws_fluent_bit_init_file_1', value: '/fluent-bit/parsers/parsers.conf' },
-        // Fluent Bit config env vars (used in extra.conf)
-        { name: 'LOG_GROUP', value: "{{ tfstate `module.app.aws_cloudwatch_log_group.this['user-api'].name` }}" },
-        { name: 'FIREHOSE_STREAM', value: "{{ tfstate `module.app.aws_kinesis_firehose_delivery_stream.audit_logs.name` }}" },
+        { name: 'AUDIT_STREAM', value: "{{ tfstate `output.firehose_stream_names['audit']` }}" },
       ],
       logConfiguration: {
         logDriver: 'awslogs',
         options: {
-          'awslogs-group': "{{ tfstate `module.app.aws_cloudwatch_log_group.this['user-api'].name` }}",
+          'awslogs-group': "{{ tfstate `module.app.aws_cloudwatch_log_group.fluent_bit.name` }}",
           'awslogs-region': 'ap-northeast-1',
-          'awslogs-stream-prefix': 'firelens',
+          'awslogs-stream-prefix': 'user-api',
         },
       },
       memoryReservation: 64,
     },
-    // nginx reverse proxy
     {
       name: 'nginx',
       image: "{{ tfstate `module.app.aws_ecr_repository.nginx.repository_url` }}:{{ env `NGINX_IMAGE_TAG` `latest` }}",
+      readonlyRootFilesystem: true,
+      stopTimeout: 30,
       portMappings: [
         {
           containerPort: 80,
@@ -43,22 +49,26 @@
         { containerName: 'app', condition: 'HEALTHY' },
         { containerName: 'log_router', condition: 'START' },
       ],
+      mountPoints: [
+        { sourceVolume: 'nginx-cache', containerPath: '/var/cache/nginx', readOnly: false },
+        { sourceVolume: 'nginx-run', containerPath: '/var/run', readOnly: false },
+        { sourceVolume: 'nginx-tmp', containerPath: '/tmp', readOnly: false },
+      ],
       logConfiguration: {
         logDriver: 'awsfirelens',
         options: {
-          Name: 'cloudwatch_logs',
+          Name: 'kinesis_firehose',
           region: 'ap-northeast-1',
-          log_group_name: "{{ tfstate `module.app.aws_cloudwatch_log_group.this['user-api'].name` }}",
-          log_stream_prefix: 'nginx/',
-          auto_create_group: 'false',
+          delivery_stream: "{{ tfstate `output.firehose_stream_names['ecs-logs']` }}",
         },
       },
       memoryReservation: 64,
     },
-    // Application container
     {
       name: 'app',
       image: "{{ tfstate `module.app.aws_ecr_repository.this['user-api'].repository_url` }}:{{ env `IMAGE_TAG` `latest` }}",
+      readonlyRootFilesystem: true,
+      stopTimeout: 30,
       portMappings: [
         {
           containerPort: 8080,
@@ -68,6 +78,9 @@
       essential: true,
       dependsOn: [
         { containerName: 'log_router', condition: 'START' },
+      ],
+      mountPoints: [
+        { sourceVolume: 'app-tmp', containerPath: '/tmp', readOnly: false },
       ],
       healthCheck: {
         command: ['CMD-SHELL', "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""],
@@ -79,14 +92,16 @@
       logConfiguration: {
         logDriver: 'awsfirelens',
         options: {
-          Name: 'cloudwatch_logs',
+          Name: 'kinesis_firehose',
           region: 'ap-northeast-1',
-          log_group_name: "{{ tfstate `module.app.aws_cloudwatch_log_group.this['user-api'].name` }}",
-          log_stream_prefix: 'app/',
-          auto_create_group: 'false',
+          delivery_stream: "{{ tfstate `output.firehose_stream_names['ecs-logs']` }}",
         },
       },
       environment: [
+        {
+          name: 'PYTHONDONTWRITEBYTECODE',
+          value: '1',
+        },
         {
           name: 'ALLOWED_HOSTS',
           value: "localhost,127.0.0.1,{{ tfstate `output.lane_domains['user']` }}",

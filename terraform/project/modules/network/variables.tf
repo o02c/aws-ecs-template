@@ -29,18 +29,21 @@ variable "gateway_endpoints" {
 }
 
 variable "transit_gateway_id" {
-  description = "Transit Gateway ID for shared VPC connectivity. Empty string to disable."
+  description = "Transit Gateway ID for shared VPC connectivity"
   type        = string
-  default     = ""
 }
 
 variable "shared_endpoint_phz_zone_ids" {
   description = "Map of endpoint name to Route53 PHZ zone ID from shared VPC"
   type        = map(string)
-  default     = {}
 }
 
 variable "kms_key_arn" {
   description = "KMS key ARN for CloudWatch Logs encryption"
   type        = string
+}
+
+variable "flow_log_retention_days" {
+  description = "Retention period (days) for VPC flow log CloudWatch group"
+  type        = number
 }

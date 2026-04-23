@@ -8,6 +8,7 @@ resource "aws_lb" "this" {
   load_balancer_type = "application"
   security_groups    = [var.alb_security_group_id]
   subnets            = values(var.private_subnet_ids)
+  idle_timeout       = var.idle_timeout_seconds
 
   access_logs {
     bucket  = var.log_bucket_id
@@ -26,18 +27,18 @@ resource "aws_lb" "this" {
 
 resource "aws_lb_target_group" "this" {
   name                 = "${var.project_name}-${var.environment}-${var.lane}"
-  port                 = 80
+  port                 = var.container_port
   protocol             = "HTTP"
   vpc_id               = var.vpc_id
   target_type          = "ip"
-  deregistration_delay = 30
+  deregistration_delay = var.target_group.deregistration_delay_seconds
 
   health_check {
-    path                = var.health_check_path
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
+    path                = var.target_group.health_check.path
+    healthy_threshold   = var.target_group.health_check.healthy_threshold
+    unhealthy_threshold = var.target_group.health_check.unhealthy_threshold
+    timeout             = var.target_group.health_check.timeout_seconds
+    interval            = var.target_group.health_check.interval_seconds
     matcher             = "200"
   }
 

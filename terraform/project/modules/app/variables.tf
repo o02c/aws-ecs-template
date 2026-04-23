@@ -63,13 +63,11 @@ variable "s3_bucket_arns" {
 variable "rds_iam_auth_policy_arn" {
   description = "ARN of the RDS IAM authentication policy"
   type        = string
-  default     = ""
 }
 
 variable "s3_access_policy_arns" {
   description = "Map of lane to S3 access policy ARN"
   type        = map(string)
-  default     = {}
 }
 
 variable "s3_prefix_list_id" {
@@ -78,27 +76,23 @@ variable "s3_prefix_list_id" {
 }
 
 variable "cloudfront_signing_key_secret_arn" {
-  description = "ARN of the Secrets Manager secret containing the CloudFront signing private key"
+  description = "ARN of the Secrets Manager secret containing the CloudFront signing private key (empty = signing disabled)"
   type        = string
-  default     = ""
 }
 
 variable "container_port" {
   description = "Container port for ECS tasks"
   type        = number
-  default     = 80
-}
-
-variable "log_retention_days" {
-  description = "CloudWatch log retention in days"
-  type        = number
-  default     = 30
 }
 
 variable "logs_kms_key_arn" {
-  description = "KMS key ARN for CloudWatch Logs encryption"
+  description = "KMS key ARN for SSM parameter / logs encryption key (used by task execution role)"
   type        = string
-  default     = ""
+}
+
+variable "firehose_buffering_interval_seconds" {
+  description = "Firehose buffering interval (seconds) for ECS log delivery streams"
+  type        = number
 }
 
 variable "aws_account_id" {
@@ -107,11 +101,11 @@ variable "aws_account_id" {
 }
 
 variable "s3_kms_key_arn" {
-  description = "KMS key ARN for S3 encryption (audit logs)"
+  description = "KMS key ARN for S3 encryption (Firehose destinations)"
   type        = string
 }
 
 variable "log_bucket_id" {
-  description = "S3 bucket ID for server access logging"
+  description = "Shared access-log S3 bucket ID (owns audit/ + ecs-logs/ prefixes)"
   type        = string
 }

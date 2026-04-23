@@ -118,7 +118,7 @@ resource "aws_iam_role_policy_attachment" "task_s3_access" {
 }
 
 # --------------------------------------------------------------------------------
-# FireLens Permissions (CloudWatch Logs + Firehose)
+# FireLens Permissions (Firehose only; ECS task stdout/stderr はすべて Firehose 経由)
 # --------------------------------------------------------------------------------
 
 resource "aws_iam_role_policy" "task_firelens" {
@@ -131,18 +131,9 @@ resource "aws_iam_role_policy" "task_firelens" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogStreams"
-        ]
-        Resource = "${aws_cloudwatch_log_group.this[each.key].arn}:*"
-      },
-      {
         Effect   = "Allow"
         Action   = "firehose:PutRecordBatch"
-        Resource = aws_kinesis_firehose_delivery_stream.audit_logs.arn
+        Resource = [for s in aws_kinesis_firehose_delivery_stream.this : s.arn]
       },
       {
         Effect = "Allow"
@@ -151,8 +142,8 @@ resource "aws_iam_role_policy" "task_firelens" {
           "s3:GetBucketLocation"
         ]
         Resource = [
-          aws_s3_bucket.audit_logs.arn,
-          "${aws_s3_bucket.audit_logs.arn}/fluent-bit/*"
+          "arn:aws:s3:::${var.log_bucket_id}",
+          "arn:aws:s3:::${var.log_bucket_id}/fluent-bit/*",
         ]
       },
       {
@@ -162,4 +153,96 @@ resource "aws_iam_role_policy" "task_firelens" {
       }
     ]
   })
+}
+
+# --------------------------------------------------------------------------------
+# Firehose delivery role (writes FireLens-routed ECS logs to the shared log bucket)
+# --------------------------------------------------------------------------------
+
+resource "aws_iam_role" "firehose" {
+  name = "${var.project_name}-${var.environment}-firehose"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "firehose.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-firehose"
+  }
+}
+
+resource "aws_iam_role_policy" "firehose" {
+  name = "firehose-s3-access"
+  role = aws_iam_role.firehose.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:AbortMultipartUpload",
+          "s3:GetBucketLocation",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:ListBucketMultipartUploads",
+          "s3:PutObject",
+        ]
+        Resource = concat(
+          ["arn:aws:s3:::${var.log_bucket_id}"],
+          [for k, v in local.firehose_streams : "arn:aws:s3:::${var.log_bucket_id}/${v.s3_prefix}/*"],
+          [for k, v in local.firehose_streams : "arn:aws:s3:::${var.log_bucket_id}/${v.s3_prefix}-errors/*"],
+        )
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+        ]
+        Resource = var.s3_kms_key_arn
+      }
+    ]
+  })
+}
+
+# --------------------------------------------------------------------------------
+# Secrets Manager Access (for CloudFront signing key, feature-flagged)
+# --------------------------------------------------------------------------------
+
+resource "aws_iam_policy" "secrets_read" {
+  for_each = var.cloudfront_signing_key_secret_arn != "" ? { "default" = true } : {}
+
+  name = "${var.project_name}-${var.environment}-secrets-read"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = var.cloudfront_signing_key_secret_arn
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-secrets-read"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "task_secrets_read" {
+  for_each = var.cloudfront_signing_key_secret_arn != "" ? var.services : {}
+
+  role       = aws_iam_role.task[each.key].name
+  policy_arn = aws_iam_policy.secrets_read["default"].arn
 }

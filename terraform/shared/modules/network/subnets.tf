@@ -10,7 +10,7 @@ resource "aws_subnet" "public" {
   availability_zone = each.key
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-shared-public-${each.key}"
+    Name = "${var.project_name}-${var.environment}-public-${each.key}"
   }
 }
 
@@ -26,6 +26,6 @@ resource "aws_subnet" "private" {
   availability_zone = each.key
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-shared-private-${each.key}"
+    Name = "${var.project_name}-${var.environment}-private-${each.key}"
   }
 }

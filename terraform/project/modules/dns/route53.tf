@@ -13,10 +13,12 @@ resource "aws_route53_zone" "this" {
 # --------------------------------------------------------------------------------
 # Domain Registrar Nameserver Sync
 # --------------------------------------------------------------------------------
+# Always enabled: this template assumes the root domain is registered with
+# Route53 Domains (AWS-registered) so the NS records of the registrar must
+# match the hosted zone. If a future project hosts the registrar elsewhere,
+# restore a feature flag then.
 
 resource "aws_route53domains_registered_domain" "this" {
-  for_each = var.manage_registrar_ns ? { "main" = true } : {}
-
   domain_name = var.domain_name
 
   dynamic "name_server" {

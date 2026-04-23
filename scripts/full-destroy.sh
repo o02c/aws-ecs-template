@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
-# Full destroy script: ECS → S3 empty → ECR cache → project → S3 re-empty → shared → log cleanup
+# Full destroy: ECS → S3 empty → ECR cache → project TF (retry+empty) → shared TF → log cleanup
 # Usage: bash scripts/full-destroy.sh
+#
+# Resource discovery is tag-based (ManagedBy=terraform) so this script does NOT
+# need to be updated when resource names or prefixes change. The only hardcoded
+# parts are:
+#   - ECS cluster / service names (ecspresso owns those, not TF tags)
+#   - ECR pull-through cache prefix (AWS auto-creates those, not TF-tagged)
+#   - CloudWatch log group name patterns (AWS auto-creates flow log / ECS exec groups)
+#
+# Bucket race handling:
+#   Terraform resources (aws_s3_bucket) intentionally do NOT set force_destroy.
+#   Instead, this script runs `terraform destroy` in a retry loop that re-empties
+#   any tag-matched buckets between attempts. This avoids the risk of
+#   force_destroy accidentally deleting business data in prod.
 set -euo pipefail
 
 export AWS_PROFILE="${AWS_PROFILE:-terraform}"
@@ -9,22 +22,79 @@ export AWS_REGION="ap-northeast-1"
 PROJECT_NAME="myapp"
 ENVIRONMENT="dev"
 
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-SHARED_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+TF_DESTROY_MAX_ATTEMPTS="${TF_DESTROY_MAX_ATTEMPTS:-4}"
 
-ALL_BUCKETS=(
-  "${SHARED_PREFIX}-user-assets"
-  "${SHARED_PREFIX}-admin-assets"
-  "${SHARED_PREFIX}-access-logs-${ACCOUNT_ID}"
-  "${SHARED_PREFIX}-audit-logs-${ACCOUNT_ID}"
-  "${SHARED_PREFIX}-access-logs"
-)
+# --------------------------------------------------------------------------------
+# Helpers
+# --------------------------------------------------------------------------------
 
-empty_buckets() {
-  for bucket in "${ALL_BUCKETS[@]}"; do
+# List S3 buckets tagged ManagedBy=terraform in current account.
+list_tagged_buckets() {
+  local region="${1:-$AWS_REGION}"
+  aws resourcegroupstaggingapi get-resources \
+    --region "$region" \
+    --tag-filters "Key=ManagedBy,Values=terraform" \
+    --resource-type-filters "s3" \
+    --query 'ResourceTagMappingList[].ResourceARN' \
+    --output text 2>/dev/null \
+    | tr '\t' '\n' \
+    | awk -F: '{print $NF}' \
+    | sort -u
+}
+
+# Empty every TF-tagged bucket, including versioned objects.
+empty_tagged_buckets() {
+  local region="${1:-$AWS_REGION}"
+  local buckets
+  buckets="$(list_tagged_buckets "$region" || true)"
+  if [ -z "$buckets" ]; then
+    echo "  (no TF-tagged buckets found)"
+    return
+  fi
+  while IFS= read -r bucket; do
+    [ -z "$bucket" ] && continue
     echo "  Emptying ${bucket}..."
     aws s3 rm "s3://${bucket}" --recursive 2>/dev/null || true
     python3 scripts/empty-versioned-bucket.py "${bucket}" 2>/dev/null || true
+  done <<< "$buckets"
+}
+
+# `terraform destroy` with automatic retry when BucketNotEmpty blocks deletion.
+# Between attempts, we re-empty every TF-tagged bucket (tag-based discovery)
+# so any new logs written by ALB/CloudFront/Firehose during the previous
+# attempt get cleared before the next try.
+tf_destroy_with_retry() {
+  local dir="$1"
+  shift
+  local attempt
+  for attempt in $(seq 1 "$TF_DESTROY_MAX_ATTEMPTS"); do
+    echo "  [destroy attempt ${attempt}/${TF_DESTROY_MAX_ATTEMPTS}] ${dir}"
+    if terraform -chdir="$dir" destroy -auto-approve -input=false "$@"; then
+      return 0
+    fi
+    echo "  attempt ${attempt} failed; re-emptying tagged buckets and retrying..."
+    empty_tagged_buckets
+    sleep 5
+  done
+  echo "  destroy did not converge after ${TF_DESTROY_MAX_ATTEMPTS} attempts" >&2
+  return 1
+}
+
+# Delete log groups whose names match any of the given patterns (in a region).
+delete_log_groups_matching() {
+  local region="$1"
+  shift
+  local groups
+  groups="$(aws logs describe-log-groups --region "$region" --query 'logGroups[].logGroupName' --output text 2>/dev/null || true)"
+  for pattern in "$@"; do
+    for lg in $groups; do
+      case "$lg" in
+        $pattern)
+          aws logs delete-log-group --region "$region" --log-group-name "$lg" 2>/dev/null \
+            && echo "  Deleted ${region}:${lg}" || true
+          ;;
+      esac
+    done
   done
 }
 
@@ -54,11 +124,11 @@ echo "  done"
 # 2. Empty S3 Buckets (first pass - before terraform destroy)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [2/7] Empty S3 Buckets (first pass) ---"
-empty_buckets
+echo "--- [2/7] Empty S3 Buckets (first pass, tag-based discovery) ---"
+empty_tagged_buckets
 
 # --------------------------------------------------------------------------------
-# 3. Delete ECR Pull-through Cache Repos
+# 3. Delete ECR Pull-through Cache Repos (AWS auto-creates these, not TF-tagged)
 # --------------------------------------------------------------------------------
 echo ""
 echo "--- [3/7] Delete ECR Cache Repos ---"
@@ -69,49 +139,40 @@ for repo in $repos; do
 done
 
 # --------------------------------------------------------------------------------
-# 4. Destroy Project Infrastructure
+# 4. Destroy Project Infrastructure (retry + re-empty on BucketNotEmpty)
 # --------------------------------------------------------------------------------
 echo ""
 echo "--- [4/7] Destroy Project Infrastructure ---"
 terraform -chdir=terraform/project/environments/${ENVIRONMENT} init -upgrade -input=false
-terraform -chdir=terraform/project/environments/${ENVIRONMENT} destroy -auto-approve -input=false
+tf_destroy_with_retry "terraform/project/environments/${ENVIRONMENT}"
 
 # --------------------------------------------------------------------------------
-# 5. Empty S3 Buckets (second pass - ALB may have written logs during destroy)
+# 5. Empty S3 Buckets (second pass - belt-and-suspenders before shared destroy)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [5/7] Empty S3 Buckets (second pass) ---"
-empty_buckets
+echo "--- [5/7] Empty S3 Buckets (second pass, tag-based discovery) ---"
+empty_tagged_buckets
 
 # --------------------------------------------------------------------------------
-# 6. Destroy Shared Infrastructure
+# 6. Destroy Shared Infrastructure (retry + re-empty; -refresh=false for PHZ)
 # --------------------------------------------------------------------------------
 echo ""
 echo "--- [6/7] Destroy Shared Infrastructure ---"
-# Final bucket cleanup right before shared destroy
-for bucket in "${SHARED_PREFIX}-access-logs"; do
-  aws s3 rm "s3://${bucket}" --recursive 2>/dev/null || true
-  python3 scripts/empty-versioned-bucket.py "${bucket}" 2>/dev/null || true
-done
 terraform -chdir=terraform/shared/environments/${ENVIRONMENT} init -upgrade -input=false
 # -refresh=false avoids dns_entry[0] empty collection error during endpoint+PHZ destroy
-terraform -chdir=terraform/shared/environments/${ENVIRONMENT} destroy -auto-approve -input=false -refresh=false
+tf_destroy_with_retry "terraform/shared/environments/${ENVIRONMENT}" -refresh=false
 
 # --------------------------------------------------------------------------------
-# 7. Cleanup orphaned CloudWatch Log Groups
+# 7. Cleanup orphaned CloudWatch Log Groups (AWS auto-creates these; not TF-managed)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [7/7] Cleanup Log Groups ---"
-for lg in \
-  "/aws/vpc/flow-log/${PROJECT_NAME}-${ENVIRONMENT}-shared" \
-  "/aws/vpc/flow-log/${PROJECT_NAME}-${ENVIRONMENT}" \
-  "/ecs/${PROJECT_NAME}-${ENVIRONMENT}/admin-api" \
-  "/ecs/${PROJECT_NAME}-${ENVIRONMENT}/user-api"; do
-  aws logs delete-log-group --log-group-name "${lg}" 2>/dev/null && echo "  Deleted ${lg}" || true
-done
-for lane in user admin; do
-  aws logs delete-log-group --log-group-name "aws-waf-logs-${PROJECT_NAME}-${ENVIRONMENT}-${lane}" --region us-east-1 2>/dev/null && echo "  Deleted aws-waf-logs-${PROJECT_NAME}-${ENVIRONMENT}-${lane}" || true
-done
+echo "--- [7/7] Cleanup orphan Log Groups (pattern-based) ---"
+# Patterns cover: VPC flow logs, ECS task/exec logs for our cluster, and WAF logs.
+delete_log_groups_matching "$AWS_REGION" \
+  "/aws/vpc/flow-log/*" \
+  "/ecs/${PROJECT_NAME}-${ENVIRONMENT}/*"
+delete_log_groups_matching "us-east-1" \
+  "aws-waf-logs-${PROJECT_NAME}-${ENVIRONMENT}-*"
 
 echo ""
 echo "=== Destroy Complete ==="

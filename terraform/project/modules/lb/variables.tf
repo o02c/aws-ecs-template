@@ -36,19 +36,30 @@ variable "ecs_security_group_id" {
 variable "acm_certificate_arn" {
   description = "ACM certificate ARN for HTTPS listener"
   type        = string
-  default     = ""
 }
 
-variable "health_check_path" {
-  description = "Health check path for target group"
-  type        = string
-  default     = "/health"
+variable "idle_timeout_seconds" {
+  description = "ALB idle timeout in seconds (connection keep-alive budget)"
+  type        = number
 }
 
 variable "container_port" {
-  description = "Container port for ECS tasks"
+  description = "Container port for ECS tasks (target group port)"
   type        = number
-  default     = 80
+}
+
+variable "target_group" {
+  description = "Target group tuning: deregistration grace period and health check thresholds"
+  type = object({
+    deregistration_delay_seconds = number
+    health_check = object({
+      path                = string
+      healthy_threshold   = number
+      unhealthy_threshold = number
+      timeout_seconds     = number
+      interval_seconds    = number
+    })
+  })
 }
 
 variable "log_bucket_id" {

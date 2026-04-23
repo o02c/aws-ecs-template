@@ -6,7 +6,7 @@ resource "aws_route_table" "public" {
   vpc_id = aws_vpc.this.id
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-shared-public-rt"
+    Name = "${var.project_name}-${var.environment}-public"
   }
 }
 
@@ -17,7 +17,7 @@ resource "aws_route" "public_to_projects" {
   destination_cidr_block = each.value
   transit_gateway_id     = aws_ec2_transit_gateway.this.id
 
-  depends_on = [aws_ec2_transit_gateway_vpc_attachment.shared]
+  depends_on = [aws_ec2_transit_gateway_vpc_attachment.this]
 }
 
 resource "aws_route_table_association" "public" {
@@ -37,7 +37,7 @@ resource "aws_route_table" "private" {
   vpc_id = aws_vpc.this.id
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-shared-private-rt-${each.key}"
+    Name = "${var.project_name}-${var.environment}-private-${each.key}"
   }
 }
 
@@ -55,7 +55,7 @@ resource "aws_route" "private_to_projects" {
   destination_cidr_block = each.value.cidr_block
   transit_gateway_id     = aws_ec2_transit_gateway.this.id
 
-  depends_on = [aws_ec2_transit_gateway_vpc_attachment.shared]
+  depends_on = [aws_ec2_transit_gateway_vpc_attachment.this]
 }
 
 resource "aws_route_table_association" "private" {

@@ -6,8 +6,8 @@ resource "aws_rds_cluster" "this" {
   cluster_identifier            = "${var.project_name}-${var.environment}"
   engine                        = "aurora-postgresql"
   engine_mode                   = "provisioned"
-  engine_version                = "16.4"
-  database_name                 = var.database_name
+  engine_version                = var.db_config.engine_version
+  database_name                 = var.db_config.database_name
   master_username               = var.master_username
   manage_master_user_password   = true
   master_user_secret_kms_key_id = var.kms_key_arn
@@ -18,14 +18,14 @@ resource "aws_rds_cluster" "this" {
   iam_database_authentication_enabled = true
   storage_encrypted                   = true
   kms_key_id                          = var.kms_key_arn
-  deletion_protection                 = var.deletion_protection
-  skip_final_snapshot                 = var.skip_final_snapshot
+  deletion_protection                 = var.db_config.deletion_protection
+  skip_final_snapshot                 = var.db_config.skip_final_snapshot
   final_snapshot_identifier           = "${var.project_name}-${var.environment}-final"
-  backup_retention_period             = 7
+  backup_retention_period             = var.db_config.backup_retention_period
 
   serverlessv2_scaling_configuration {
-    min_capacity = var.serverless_min_capacity
-    max_capacity = var.serverless_max_capacity
+    min_capacity = var.db_config.serverless_min_capacity
+    max_capacity = var.db_config.serverless_max_capacity
   }
 
   tags = {
@@ -38,7 +38,7 @@ resource "aws_rds_cluster" "this" {
 # --------------------------------------------------------------------------------
 
 resource "aws_rds_cluster_instance" "this" {
-  for_each = var.db_instances
+  for_each = var.db_config.instances
 
   identifier              = "${var.project_name}-${var.environment}-${each.key}"
   cluster_identifier      = aws_rds_cluster.this.id

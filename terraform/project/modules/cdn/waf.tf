@@ -131,7 +131,7 @@ resource "aws_cloudwatch_log_group" "waf" {
   provider = aws.us_east_1
 
   name              = "aws-waf-logs-${var.project_name}-${var.environment}-${var.lane}"
-  retention_in_days = 30
+  retention_in_days = var.waf_log_retention_days
 
   # NOTE: KMS encryption is not configured because no us-east-1 KMS key exists.
   # To enable, create a KMS key in us-east-1 and set kms_key_id here.

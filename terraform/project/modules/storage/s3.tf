@@ -49,31 +49,8 @@ resource "aws_s3_bucket_logging" "this" {
   target_prefix = var.log_prefix
 }
 
-# --------------------------------------------------------------------------------
-# SSL Enforcement
-# --------------------------------------------------------------------------------
-
-resource "aws_s3_bucket_policy" "ssl_enforcement" {
-  bucket = aws_s3_bucket.this.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          aws_s3_bucket.this.arn,
-          "${aws_s3_bucket.this.arn}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
-      }
-    ]
-  })
-}
+# NOTE: SSL enforcement + CloudFront OAC are merged into a single bucket policy
+# in the cdn module (terraform/project/modules/cdn/s3_bucket_policy.tf).
+# S3 allows only one bucket policy per bucket — having two aws_s3_bucket_policy
+# resources targeting the same bucket causes last-writer-wins and silently
+# drops whichever statement loses the race.

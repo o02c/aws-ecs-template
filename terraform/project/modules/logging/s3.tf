@@ -57,12 +57,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
     status = "Enabled"
 
     transition {
-      days          = 90
+      days          = var.access_log_lifecycle.transition_days
       storage_class = "GLACIER"
     }
 
     expiration {
-      days = 365
+      days = var.access_log_lifecycle.expiration_days
     }
   }
 }
