@@ -85,6 +85,11 @@ variable "cloudfront_signing_key_secret_arn" {
   type        = string
 }
 
+variable "secrets_kms_key_arn" {
+  description = "KMS key ARN used to encrypt the CloudFront signing Secrets Manager secret (tasks need kms:Decrypt to read the secret value)"
+  type        = string
+}
+
 variable "container_port" {
   description = "Container port for ECS tasks"
   type        = number

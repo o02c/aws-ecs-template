@@ -228,10 +228,19 @@ resource "aws_iam_policy" "secrets_read" {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid      = "ReadSigningSecret"
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
         Resource = var.cloudfront_signing_key_secret_arn
-      }
+      },
+      {
+        # Secrets Manager wraps the secret value with the secrets KMS key;
+        # GetSecretValue fails without kms:Decrypt on that key.
+        Sid      = "DecryptSigningSecretEnvelope"
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = var.secrets_kms_key_arn
+      },
     ]
   })
 

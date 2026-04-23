@@ -154,6 +154,7 @@ module "app" {
   }
   cloudfront_signing_enabled          = local.cloudfront_signing_enabled
   cloudfront_signing_key_secret_arn   = local.cloudfront_signing_key_secret_arn
+  secrets_kms_key_arn                 = module.kms.key_arns["secrets"]
   logs_kms_key_arn                    = module.kms.key_arns["logs"]
   aws_account_id                      = data.aws_caller_identity.current.account_id
   s3_kms_key_arn                      = module.kms.key_arns["s3"]

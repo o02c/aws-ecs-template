@@ -40,7 +40,7 @@ echo "=== Verify Deploy: ${PROJECT_NAME}-${ENVIRONMENT} @ ${DOMAIN_NAME} ==="
 # 1. HTTPS health check (all lanes)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [1/8] HTTPS Health ---"
+echo "--- [1/9] HTTPS Health ---"
 for lane in "${LANES[@]}"; do
   url="https://$(lane_fqdn "$lane")/health"
   code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
@@ -55,7 +55,7 @@ done
 # 2. TLS / cert hygiene
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [2/8] TLS / Certificate ---"
+echo "--- [2/9] TLS / Certificate ---"
 for lane in "${LANES[@]}"; do
   host="$(lane_fqdn "$lane")"
   tls_info=$(echo | openssl s_client -connect "${host}:443" -servername "${host}" -brief 2>&1 | grep -E 'Protocol version|Ciphersuite|Verification' || true)
@@ -81,7 +81,7 @@ done
 # 3. Generate traffic to populate log destinations
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [3/8] Generate traffic (3 requests per lane) ---"
+echo "--- [3/9] Generate traffic (3 requests per lane) ---"
 for lane in "${LANES[@]}"; do
   for _ in 1 2 3; do
     curl -sSk --max-time 10 "https://$(lane_fqdn "$lane")/health" > /dev/null 2>&1 || true
@@ -94,7 +94,7 @@ sleep 120
 # 4. CloudWatch Logs destinations (infra-level only — ECS logs go to S3)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [4/8] CloudWatch Logs (VPC flow only) ---"
+echo "--- [4/9] CloudWatch Logs (VPC flow only) ---"
 
 check_cw_group_has_events() {
   local region="$1" lg="$2" label="$3"
@@ -121,7 +121,7 @@ check_cw_group_has_events "$AWS_REGION" "/aws/vpc/flow-log/${PROJECT_NAME}-${ENV
 # 5. S3 Log Destinations (all logs land in the single access-log bucket)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [5/8] S3 Log Destinations (single bucket, prefix-separated) ---"
+echo "--- [5/9] S3 Log Destinations (single bucket, prefix-separated) ---"
 
 check_s3_prefix() {
   local bucket="$1" prefix="$2" label="$3" mandatory="${4:-1}"
@@ -165,7 +165,7 @@ check_s3_prefix "$ACCESS_LOG_BUCKET" "fluent-bit/" "FireLens config" 0
 # 6. Bucket / log group security posture (spot checks)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [6/8] Security Posture Spot Checks ---"
+echo "--- [6/9] Security Posture Spot Checks ---"
 
 for b in "$ACCESS_LOG_BUCKET" "$WAF_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets" "${PROJECT_NAME}-${ENVIRONMENT}-admin-assets"; do
   pab=$(aws s3api get-public-access-block --bucket "$b" --query 'PublicAccessBlockConfiguration' --output json 2>/dev/null || echo "{}")
@@ -189,7 +189,7 @@ done
 # 7. SES / SNS subscription state (pending manual Gmail confirm)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [7/8] SES identity + SNS subscription state ---"
+echo "--- [7/9] SES identity + SNS subscription state ---"
 
 # Domain identity DKIM verification — iterate all domain identities
 while IFS= read -r domain; do
@@ -238,7 +238,7 @@ done
 # 8. CloudWatch Alarm inventory
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [8/8] CloudWatch Alarms ---"
+echo "--- [8/9] CloudWatch Alarms ---"
 
 alarm_names=$(aws cloudwatch describe-alarms \
   --alarm-name-prefix "${PROJECT_NAME}-${ENVIRONMENT}-" \
@@ -259,6 +259,39 @@ else
     done <<< "$in_alarm"
   fi
 fi
+
+# --------------------------------------------------------------------------------
+# 9. CloudFront Signed URL E2E (upload → issue signed URL → fetch → reject unsigned)
+# --------------------------------------------------------------------------------
+echo ""
+echo "--- [9/9] CloudFront Signed URL E2E ---"
+
+user_fqdn=$(lane_fqdn user)
+test_file="/tmp/verify-deploy-signed-url-$$.txt"
+echo "verify-deploy signed URL probe $(date +%s)" > "$test_file"
+
+upload_resp=$(curl -sSk --max-time 30 -X POST "https://${user_fqdn}/api/files/upload" -F "file=@${test_file}" 2>/dev/null || echo "")
+file_id=$(echo "$upload_resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("file_id",""))' 2>/dev/null || echo "")
+
+if [ -z "$file_id" ]; then
+  fail "signed URL probe: upload failed (${upload_resp:0:80})"
+else
+  url_resp=$(curl -sSk --max-time 30 "https://${user_fqdn}/api/files/${file_id}/url?ext=.txt&ttl=300" 2>/dev/null || echo "")
+  signed_url=$(echo "$url_resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("url",""))' 2>/dev/null || echo "")
+
+  if [ -z "$signed_url" ]; then
+    fail "signed URL probe: issue failed (${url_resp:0:80})"
+  else
+    signed_code=$(curl -sSk --max-time 30 -o /dev/null -w '%{http_code}' "$signed_url" 2>/dev/null || echo "000")
+    unsigned_code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "https://${user_fqdn}/files/${file_id}.txt" 2>/dev/null || echo "000")
+    if [ "$signed_code" = "200" ] && [ "$unsigned_code" = "403" ]; then
+      ok "signed URL: signed=${signed_code} unsigned=${unsigned_code}"
+    else
+      fail "signed URL: signed=${signed_code} (want 200) unsigned=${unsigned_code} (want 403)"
+    fi
+  fi
+fi
+rm -f "$test_file"
 
 echo ""
 if [ "$FAILED" -eq 0 ]; then

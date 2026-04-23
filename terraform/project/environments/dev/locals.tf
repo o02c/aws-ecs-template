@@ -94,8 +94,9 @@ locals {
       service     = null
     }
     s3 = {
-      description = "CMK for S3 bucket encryption"
-      service     = null
+      description        = "CMK for S3 bucket encryption"
+      service            = null
+      cloudfront_enabled = true
     }
     logs = {
       description = "CMK for CloudWatch Logs encryption"

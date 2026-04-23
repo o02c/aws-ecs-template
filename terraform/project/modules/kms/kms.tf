@@ -74,4 +74,32 @@ data "aws_iam_policy_document" "key" {
       }
     }
   }
+
+  # CloudFront OAC needs kms:Decrypt to fetch KMS-encrypted origin objects.
+  # Scoped to aws:SourceAccount rather than the distribution ARN so we avoid
+  # the circular dep (KMS key → S3 bucket → CloudFront distribution → KMS key).
+  # Only our own CloudFront distributions run in this account, so the account
+  # condition is tight enough.
+  dynamic "statement" {
+    for_each = each.value.cloudfront_enabled ? { enabled = true } : {}
+
+    content {
+      sid    = "AllowCloudFrontServicePrincipal"
+      effect = "Allow"
+
+      principals {
+        type        = "Service"
+        identifiers = ["cloudfront.amazonaws.com"]
+      }
+
+      actions   = ["kms:Decrypt"]
+      resources = ["*"]
+
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [var.aws_account_id]
+      }
+    }
+  }
 }
