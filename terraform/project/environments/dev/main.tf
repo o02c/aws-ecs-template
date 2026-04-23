@@ -152,7 +152,8 @@ module "app" {
   s3_access_policy_arns = {
     for lane, mod in module.storage : lane => mod.s3_access_policy_arn
   }
-  cloudfront_signing_key_secret_arn   = var.cloudfront_signing_key_secret_arn
+  cloudfront_signing_enabled          = local.cloudfront_signing_enabled
+  cloudfront_signing_key_secret_arn   = local.cloudfront_signing_key_secret_arn
   logs_kms_key_arn                    = module.kms.key_arns["logs"]
   aws_account_id                      = data.aws_caller_identity.current.account_id
   s3_kms_key_arn                      = module.kms.key_arns["s3"]
@@ -228,8 +229,8 @@ module "cdn" {
   acm_certificate_arn            = module.dns.cloudfront_certificate_arn
   hostname                       = each.value.subdomain == "" ? var.domain_name : "${each.value.subdomain}.${var.domain_name}"
   route53_zone_id                = module.dns.zone_id
-  enable_signing                 = nonsensitive(var.cloudfront_signing_public_key_pem != "")
-  signing_public_key_pem         = var.cloudfront_signing_public_key_pem
+  enable_signing                 = local.cloudfront_signing_enabled
+  signing_public_key_pem         = local.cloudfront_signing_public_key_pem
   files_path_pattern             = local.signed_files_path_pattern
   waf_rate_limit                 = local.waf_rate_limit
   geo_restriction_locations      = local.geo_restriction_locations

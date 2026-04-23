@@ -121,11 +121,11 @@
         },
         {
           name: 'CLOUDFRONT_KEY_PAIR_ID',
-          value: '',
+          value: "{{ tfstate `output.cloudfront_signing_key_pair_ids['user']` }}",
         },
         {
           name: 'CLOUDFRONT_SIGNING_KEY_SECRET_ARN',
-          value: '',
+          value: "{{ tfstate `output.cloudfront_signing_key_secret_arn` }}",
         },
         {
           name: 'SES_FROM_ADDRESS',

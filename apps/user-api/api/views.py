@@ -1,10 +1,17 @@
+import datetime
 import json
 import logging
 import os
 import re
 import uuid
+from functools import lru_cache
 
 import boto3
+from botocore.signers import CloudFrontSigner
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -28,10 +35,33 @@ SES_ENDPOINT_URL = os.environ.get("SES_ENDPOINT_URL") or None
 MAX_EMAIL_BODY = 2000
 MAX_EMAIL_SUBJECT = 200
 
+CLOUDFRONT_KEY_PAIR_ID = os.environ.get("CLOUDFRONT_KEY_PAIR_ID", "")
+CLOUDFRONT_SIGNING_KEY_SECRET_ARN = os.environ.get("CLOUDFRONT_SIGNING_KEY_SECRET_ARN", "")
+DEFAULT_SIGNED_URL_TTL_SECONDS = 300
+MAX_SIGNED_URL_TTL_SECONDS = 3600
+
 EXT_PATTERN = re.compile(r"^\.[a-zA-Z0-9]{1,10}$")
 
 s3 = boto3.client("s3")
 ses = boto3.client("sesv2", endpoint_url=SES_ENDPOINT_URL)
+secrets_client = boto3.client("secretsmanager")
+
+
+@lru_cache(maxsize=1)
+def _load_signing_key() -> RSAPrivateKey:
+    # Secrets Manager fetch + PEM parse is cached for the life of the process:
+    # the signing key rotates rarely and the ECS task gets replaced on rotation
+    # anyway. boto3 signers keep the key in memory, so caching here is consistent.
+    secret = secrets_client.get_secret_value(SecretId=CLOUDFRONT_SIGNING_KEY_SECRET_ARN)
+    pem_bytes = secret["SecretString"].encode("utf-8")
+    key = serialization.load_pem_private_key(pem_bytes, password=None, backend=default_backend())
+    if not isinstance(key, RSAPrivateKey):
+        raise TypeError(f"Signing key must be RSA, got {type(key).__name__}")
+    return key
+
+
+def _rsa_signer(message: bytes) -> bytes:
+    return _load_signing_key().sign(message, padding.PKCS1v15(), hashes.SHA1())
 
 
 @require_GET
@@ -89,7 +119,36 @@ def get_file_url(request, file_id):
         return JsonResponse({"error": "Invalid file extension"}, status=400)
 
     s3_key = f"{S3_FILES_PREFIX}/{file_id}{ext}"
-    return JsonResponse({"file_id": file_id, "s3_key": s3_key})
+
+    if not (CLOUDFRONT_KEY_PAIR_ID and CLOUDFRONT_SIGNING_KEY_SECRET_ARN and CLOUDFRONT_DOMAIN):
+        return JsonResponse({"error": "Signed URL not configured"}, status=503)
+
+    try:
+        ttl = int(request.GET.get("ttl", DEFAULT_SIGNED_URL_TTL_SECONDS))
+    except ValueError:
+        return JsonResponse({"error": "ttl must be an integer"}, status=400)
+    ttl = max(1, min(ttl, MAX_SIGNED_URL_TTL_SECONDS))
+
+    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=ttl)
+    resource_url = f"https://{CLOUDFRONT_DOMAIN}/{s3_key}"
+    signer = CloudFrontSigner(CLOUDFRONT_KEY_PAIR_ID, _rsa_signer)
+    signed_url = signer.generate_presigned_url(resource_url, date_less_than=expires_at)
+
+    audit_logger.info(
+        "Signed URL issued",
+        extra={
+            "type": "audit",
+            "action": "signed_url_issue",
+            "resource": s3_key,
+            "expires_at": expires_at.isoformat(),
+        },
+    )
+    return JsonResponse({
+        "file_id": file_id,
+        "s3_key": s3_key,
+        "url": signed_url,
+        "expires_at": expires_at.isoformat(),
+    })
 
 
 # --------------------------------------------------------------------------------

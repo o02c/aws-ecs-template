@@ -220,7 +220,7 @@ resource "aws_iam_role_policy" "firehose" {
 # --------------------------------------------------------------------------------
 
 resource "aws_iam_policy" "secrets_read" {
-  for_each = var.cloudfront_signing_key_secret_arn != "" ? { "default" = true } : {}
+  for_each = var.cloudfront_signing_enabled ? { "default" = true } : {}
 
   name = "${var.project_name}-${var.environment}-secrets-read"
 
@@ -241,7 +241,7 @@ resource "aws_iam_policy" "secrets_read" {
 }
 
 resource "aws_iam_role_policy_attachment" "task_secrets_read" {
-  for_each = var.cloudfront_signing_key_secret_arn != "" ? var.services : {}
+  for_each = var.cloudfront_signing_enabled ? var.services : {}
 
   role       = aws_iam_role.task[each.key].name
   policy_arn = aws_iam_policy.secrets_read["default"].arn

@@ -75,8 +75,13 @@ variable "s3_prefix_list_id" {
   type        = string
 }
 
+variable "cloudfront_signing_enabled" {
+  description = "Plan-time flag: whether to attach the secrets-read policy to task roles. Paired with cloudfront_signing_key_secret_arn which is apply-time unknown when signing keys are generated in-terraform."
+  type        = bool
+}
+
 variable "cloudfront_signing_key_secret_arn" {
-  description = "ARN of the Secrets Manager secret containing the CloudFront signing private key (empty = signing disabled)"
+  description = "ARN of the Secrets Manager secret containing the CloudFront signing private key (consumed only when cloudfront_signing_enabled = true)"
   type        = string
 }
 

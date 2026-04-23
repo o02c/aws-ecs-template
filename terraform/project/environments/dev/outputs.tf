@@ -89,3 +89,19 @@ output "sns_alarm_topic_arns" {
   description = "Map of severity to SNS alarm topic ARN"
   value       = module.monitoring.topic_arns
 }
+
+# --------------------------------------------------------------------------------
+# CloudFront Signed URL (consumed by ECS task def env vars)
+# --------------------------------------------------------------------------------
+
+output "cloudfront_signing_key_pair_ids" {
+  description = "Map of lane to CloudFront signing key pair ID (empty if signing disabled)"
+  value = {
+    for lane, c in module.cdn : lane => c.signing_key_pair_id
+  }
+}
+
+output "cloudfront_signing_key_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the signing private key (empty if disabled)"
+  value       = local.cloudfront_signing_key_secret_arn
+}
