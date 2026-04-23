@@ -16,6 +16,7 @@ LANES=(user admin)
 
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ACCESS_LOG_BUCKET="${PROJECT_NAME}-${ENVIRONMENT}-access-logs-${ACCOUNT_ID}"
+WAF_LOG_BUCKET="aws-waf-logs-${PROJECT_NAME}-${ENVIRONMENT}-${ACCOUNT_ID}"
 
 FAILED=0
 ok()   { echo "  OK    $*"; }
@@ -136,9 +137,11 @@ done
 for lane in "${LANES[@]}"; do
   check_s3_prefix "$ACCESS_LOG_BUCKET" "s3/${lane}/" "S3 asset-access ${lane}" 0
 done
-# WAF logs (via us-east-1 Firehose → this bucket)
+# WAF logs (direct S3 delivery — dedicated aws-waf-logs-* bucket; key layout
+# is AWS-managed: AWSLogs/<account>/WAFLogs/cloudfront/<webacl>/...
+# — for scope=CLOUDFRONT the path segment is literally `cloudfront`, not `us-east-1`)
 for lane in "${LANES[@]}"; do
-  check_s3_prefix "$ACCESS_LOG_BUCKET" "waf/${lane}/" "WAF ${lane} (Firehose)" 0
+  check_s3_prefix "$WAF_LOG_BUCKET" "AWSLogs/${ACCOUNT_ID}/WAFLogs/cloudfront/${PROJECT_NAME}-${ENVIRONMENT}-${lane}/" "WAF ${lane} (direct S3)" 0
 done
 # ECS container logs (via Firehose, all non-audit records)
 check_s3_prefix "$ACCESS_LOG_BUCKET" "ecs-logs/" "ECS logs (Firehose)" 0
@@ -153,7 +156,7 @@ check_s3_prefix "$ACCESS_LOG_BUCKET" "fluent-bit/" "FireLens config" 0
 echo ""
 echo "--- [6/8] Security Posture Spot Checks ---"
 
-for b in "$ACCESS_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets" "${PROJECT_NAME}-${ENVIRONMENT}-admin-assets"; do
+for b in "$ACCESS_LOG_BUCKET" "$WAF_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets" "${PROJECT_NAME}-${ENVIRONMENT}-admin-assets"; do
   pab=$(aws s3api get-public-access-block --bucket "$b" --query 'PublicAccessBlockConfiguration' --output json 2>/dev/null || echo "{}")
   if echo "$pab" | grep -q '"BlockPublicAcls": true' && echo "$pab" | grep -q '"RestrictPublicBuckets": true'; then
     ok "PublicAccessBlock enforced: ${b}"
@@ -162,7 +165,7 @@ for b in "$ACCESS_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets" "${PR
   fi
 done
 
-for b in "$ACCESS_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets"; do
+for b in "$ACCESS_LOG_BUCKET" "$WAF_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets"; do
   policy=$(aws s3api get-bucket-policy --bucket "$b" --query Policy --output text 2>/dev/null || echo "")
   if echo "$policy" | grep -q 'SecureTransport'; then
     ok "SSL-only policy present: ${b}"

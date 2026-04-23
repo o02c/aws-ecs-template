@@ -236,8 +236,8 @@ module "cdn" {
   geo_restriction_locations      = local.geo_restriction_locations
   cache_ttl                      = local.cache_ttl
   log_bucket_domain_name         = module.logging.bucket_domain_name
-  log_bucket_arn                 = module.logging.bucket_arn
   log_prefix                     = "cloudfront/${each.key}/"
+  waf_log_bucket_arn             = module.logging.waf_bucket_arn
   vpc_id                         = module.network.vpc_id
   alb_security_group_id          = module.network.security_group_ids["${each.key}-alb"]
 }

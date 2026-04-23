@@ -88,8 +88,8 @@ variable "log_bucket_domain_name" {
   type        = string
 }
 
-variable "log_bucket_arn" {
-  description = "ARN of the S3 bucket for access logging (used by WAF Firehose IAM policy)"
+variable "waf_log_bucket_arn" {
+  description = "ARN of the dedicated aws-waf-logs-* bucket (direct WAF → S3 destination)"
   type        = string
 }
 
