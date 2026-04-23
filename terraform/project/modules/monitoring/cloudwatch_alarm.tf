@@ -95,7 +95,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_running_gap" {
   alarm_actions       = [aws_sns_topic.alert["critical"].arn]
   ok_actions          = [aws_sns_topic.alert["critical"].arn]
   treat_missing_data  = "notBreaching"
-  comparison_operator = "LessThanThreshold"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 1
   evaluation_periods  = var.thresholds.ecs_running_gap_evaluations
 
