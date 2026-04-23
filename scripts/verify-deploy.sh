@@ -11,6 +11,17 @@ PROJECT_NAME="myapp"
 ENVIRONMENT="dev"
 DOMAIN_NAME="${DOMAIN_NAME:-o2c.click}"
 LANES=(user admin)
+
+# Lane-to-FQDN lookup. Must mirror terraform locals.lanes.subdomain values:
+# empty subdomain → apex, non-empty → subdomain. Bash 3 on macOS lacks
+# associative arrays, so this is a case statement rather than a map.
+lane_fqdn() {
+  case "$1" in
+    user)  echo "${DOMAIN_NAME}" ;;
+    admin) echo "admin.${DOMAIN_NAME}" ;;
+    *)     echo "UNKNOWN-$1" ;;
+  esac
+}
 # SERVICES intentionally not listed — ECS logs skip CloudWatch and go through
 # Firehose → S3 ${ACCESS_LOG_BUCKET}/ecs-logs/ and ${ACCESS_LOG_BUCKET}/audit/.
 
@@ -31,7 +42,7 @@ echo "=== Verify Deploy: ${PROJECT_NAME}-${ENVIRONMENT} @ ${DOMAIN_NAME} ==="
 echo ""
 echo "--- [1/8] HTTPS Health ---"
 for lane in "${LANES[@]}"; do
-  url="https://${lane}.${DOMAIN_NAME}/health"
+  url="https://$(lane_fqdn "$lane")/health"
   code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
   if [ "$code" = "200" ]; then
     ok "${url} → 200"
@@ -46,7 +57,7 @@ done
 echo ""
 echo "--- [2/8] TLS / Certificate ---"
 for lane in "${LANES[@]}"; do
-  host="${lane}.${DOMAIN_NAME}"
+  host="$(lane_fqdn "$lane")"
   tls_info=$(echo | openssl s_client -connect "${host}:443" -servername "${host}" -brief 2>&1 | grep -E 'Protocol version|Ciphersuite|Verification' || true)
   protocol=$(echo "$tls_info" | grep 'Protocol version' | awk -F': ' '{print $2}')
   verification=$(echo "$tls_info" | grep '^Verification' | awk -F': ' '{print $2}')
@@ -58,7 +69,7 @@ for lane in "${LANES[@]}"; do
 done
 
 for lane in "${LANES[@]}"; do
-  host="${lane}.${DOMAIN_NAME}"
+  host="$(lane_fqdn "$lane")"
   if echo | openssl s_client -connect "${host}:443" -servername "${host}" -tls1_1 2>&1 | grep -q 'Cipher is'; then
     fail "${host} accepted TLS 1.1"
   else
@@ -73,7 +84,7 @@ echo ""
 echo "--- [3/8] Generate traffic (3 requests per lane) ---"
 for lane in "${LANES[@]}"; do
   for _ in 1 2 3; do
-    curl -sSk --max-time 10 "https://${lane}.${DOMAIN_NAME}/health" > /dev/null 2>&1 || true
+    curl -sSk --max-time 10 "https://$(lane_fqdn "$lane")/health" > /dev/null 2>&1 || true
   done
 done
 echo "  Waiting 120s for downstream log pipelines (Firehose 60s buffer, VPC flow ~1min)..."

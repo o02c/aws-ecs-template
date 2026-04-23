@@ -111,9 +111,11 @@ locals {
     }
   }
 
+  # subdomain = "" puts the lane on the apex domain (customer-facing).
+  # Non-empty subdomain serves that subdomain (e.g. admin).
   lanes = {
-    user  = {}
-    admin = {}
+    user  = { subdomain = "" }
+    admin = { subdomain = "admin" }
   }
 
   azs = ["${local.aws_region}a", "${local.aws_region}c"]

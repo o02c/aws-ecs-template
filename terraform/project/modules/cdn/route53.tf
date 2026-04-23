@@ -4,7 +4,7 @@
 
 resource "aws_route53_record" "cloudfront_alias" {
   zone_id = var.route53_zone_id
-  name    = "${var.lane}.${var.domain_name}"
+  name    = var.hostname
   type    = "A"
 
   alias {

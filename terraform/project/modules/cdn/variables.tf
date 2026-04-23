@@ -43,13 +43,8 @@ variable "acm_certificate_arn" {
   type        = string
 }
 
-variable "aliases" {
-  description = "List of domain aliases for CloudFront distribution"
-  type        = list(string)
-}
-
-variable "domain_name" {
-  description = "Root domain name (e.g. o2c.click)"
+variable "hostname" {
+  description = "Public FQDN for this lane (CloudFront alias, Route53 A-alias, origin Host header)"
   type        = string
 }
 

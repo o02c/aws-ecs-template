@@ -59,8 +59,11 @@ output "fluent_bit_config_s3_arn" {
 
 
 output "lane_domains" {
-  description = "Map of lane to FQDN"
-  value       = { for lane, _ in local.lanes : lane => "${lane}.${var.domain_name}" }
+  description = "Map of lane to FQDN (empty subdomain → apex domain)"
+  value = {
+    for lane, cfg in local.lanes :
+    lane => cfg.subdomain == "" ? var.domain_name : "${cfg.subdomain}.${var.domain_name}"
+  }
 }
 
 output "firehose_stream_names" {

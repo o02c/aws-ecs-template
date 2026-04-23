@@ -72,9 +72,10 @@ resource "aws_cloudfront_distribution" "this" {
   price_class     = "PriceClass_200"
   web_acl_id      = aws_wafv2_web_acl.this.arn
 
-  # ALB origin (VPC origin)
+  # ALB origin (VPC origin). domain_name is the Host header CloudFront sends
+  # to the origin — Django's ALLOWED_HOSTS must include this value.
   origin {
-    domain_name = "${var.lane}.${var.domain_name}"
+    domain_name = var.hostname
     origin_id   = "alb"
 
     vpc_origin_config {
@@ -134,7 +135,7 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
-  aliases = var.aliases
+  aliases = [var.hostname]
 
   logging_config {
     bucket          = var.log_bucket_domain_name

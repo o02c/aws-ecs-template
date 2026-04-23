@@ -226,8 +226,7 @@ module "cdn" {
   s3_bucket_id                   = module.storage[each.key].bucket_id
   cloudfront_oac_id              = module.storage[each.key].cloudfront_oac_id
   acm_certificate_arn            = module.dns.cloudfront_certificate_arn
-  aliases                        = ["${each.key}.${var.domain_name}"]
-  domain_name                    = var.domain_name
+  hostname                       = each.value.subdomain == "" ? var.domain_name : "${each.value.subdomain}.${var.domain_name}"
   route53_zone_id                = module.dns.zone_id
   enable_signing                 = nonsensitive(var.cloudfront_signing_public_key_pem != "")
   signing_public_key_pem         = var.cloudfront_signing_public_key_pem
