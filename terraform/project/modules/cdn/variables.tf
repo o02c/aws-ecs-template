@@ -88,6 +88,11 @@ variable "log_bucket_domain_name" {
   type        = string
 }
 
+variable "log_bucket_arn" {
+  description = "ARN of the S3 bucket for access logging (used by WAF Firehose IAM policy)"
+  type        = string
+}
+
 variable "log_prefix" {
   description = "Prefix for CloudFront access log objects"
   type        = string
@@ -111,7 +116,3 @@ variable "cache_ttl" {
   })
 }
 
-variable "waf_log_retention_days" {
-  description = "WAF log group retention in days"
-  type        = number
-}

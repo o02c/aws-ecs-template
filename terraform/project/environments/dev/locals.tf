@@ -6,10 +6,7 @@ locals {
   # VPC flow log CloudWatch retention (days)
   flow_log_retention_days = 30
 
-  # WAF log group retention (us-east-1)
-  waf_log_retention_days = 30
-
-  # Access-log bucket lifecycle (covers ALB/CloudFront/S3/audit/ecs-logs prefixes).
+  # Access-log bucket lifecycle (covers ALB/CloudFront/S3/audit/ecs-logs/waf prefixes).
   # dev は短期保持、prod は規制要件に合わせて長期化。
   access_log_lifecycle = {
     transition_days = 90

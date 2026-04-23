@@ -82,7 +82,7 @@ sleep 120
 # 4. CloudWatch Logs destinations (infra-level only — ECS logs go to S3)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [4/8] CloudWatch Logs (VPC flow + WAF only) ---"
+echo "--- [4/8] CloudWatch Logs (VPC flow only) ---"
 
 check_cw_group_has_events() {
   local region="$1" lg="$2" label="$3"
@@ -101,13 +101,9 @@ check_cw_group_has_events() {
   fi
 }
 
-# VPC flow logs (shared + project)
+# VPC flow logs (shared + project) — only CWL destinations left; WAF now goes to S3
 check_cw_group_has_events "$AWS_REGION" "/aws/vpc/flow-log/shared-${ENVIRONMENT}"          "VPC flow shared"
 check_cw_group_has_events "$AWS_REGION" "/aws/vpc/flow-log/${PROJECT_NAME}-${ENVIRONMENT}" "VPC flow project"
-# WAF logs (us-east-1)
-for lane in "${LANES[@]}"; do
-  check_cw_group_has_events "us-east-1" "aws-waf-logs-${PROJECT_NAME}-${ENVIRONMENT}-${lane}" "WAF ${lane}"
-done
 
 # --------------------------------------------------------------------------------
 # 5. S3 Log Destinations (all logs land in the single access-log bucket)
@@ -139,6 +135,10 @@ done
 # S3 bucket access logs (asset buckets)
 for lane in "${LANES[@]}"; do
   check_s3_prefix "$ACCESS_LOG_BUCKET" "s3/${lane}/" "S3 asset-access ${lane}" 0
+done
+# WAF logs (via us-east-1 Firehose → this bucket)
+for lane in "${LANES[@]}"; do
+  check_s3_prefix "$ACCESS_LOG_BUCKET" "waf/${lane}/" "WAF ${lane} (Firehose)" 0
 done
 # ECS container logs (via Firehose, all non-audit records)
 check_s3_prefix "$ACCESS_LOG_BUCKET" "ecs-logs/" "ECS logs (Firehose)" 0
