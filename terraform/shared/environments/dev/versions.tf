@@ -12,7 +12,6 @@ terraform {
     bucket       = "o02c-terraform-management-tfstate-654654512164"
     key          = "shared/dev/terraform.tfstate"
     region       = "ap-northeast-1"
-    profile      = "terraform"
     use_lockfile = true
     encrypt      = true
   }

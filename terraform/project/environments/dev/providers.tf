@@ -1,7 +1,4 @@
 provider "aws" {
-  region  = local.aws_region
-  profile = "terraform"
-
   default_tags {
     tags = {
       ProjectName = var.project_name
@@ -12,9 +9,8 @@ provider "aws" {
 }
 
 provider "aws" {
-  alias   = "us_east_1"
-  region  = "us-east-1"
-  profile = "terraform"
+  alias  = "us_east_1"
+  region = "us-east-1"
 
   default_tags {
     tags = {

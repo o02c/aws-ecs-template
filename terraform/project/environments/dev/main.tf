@@ -11,10 +11,9 @@ data "aws_caller_identity" "current" {}
 data "terraform_remote_state" "shared" {
   backend = "s3"
   config = {
-    bucket  = var.shared_state_bucket
-    key     = var.shared_state_key
-    region  = local.aws_region
-    profile = "terraform"
+    bucket = var.shared_state_bucket
+    key    = var.shared_state_key
+    region = local.aws_region
   }
 }
 
