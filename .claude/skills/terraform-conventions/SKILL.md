@@ -282,9 +282,9 @@ dynamic "rule" {
 
 - `required_version = ">= 1.10.0"`、`aws = "~> 6.0"`。
 - Backend は S3 + **`use_lockfile = true`** + `encrypt = true`（DynamoDB ロックは使わない、S3 native lock）。
-- `profile = "terraform"` を provider / backend 両方で指定。
-- リージョンは **`ap-northeast-1` 固定**（`security_prohibitions.md` 2.1-2）。
-- CloudFront / ACM(CF 用) 等で `us-east-1` が必要なモジュールは `versions.tf` で `configuration_aliases = [aws.us_east_1]` を宣言し、呼び出し側で `providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }` を渡す。
+- AWS 認証情報は **direnv（`.envrc` の `AWS_PROFILE`）から読ませる**。`provider` / `backend` / `data terraform_remote_state` のいずれにも `profile = "..."` を書かない（環境ごとの切替を direnv に一元化）。
+- リージョンは **`ap-northeast-1` 固定**（`security_prohibitions.md` 2.1-2）。default provider には `region` を書かず、AWS profile / `AWS_REGION` 環境変数からの解決に任せる。state バケット位置を識別する `backend.region` / `terraform_remote_state.region` のみ明示する。
+- CloudFront / ACM(CF 用) 等で `us-east-1` が必要なモジュールは `versions.tf` で `configuration_aliases = [aws.us_east_1]` を宣言し、呼び出し側で `providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }` を渡す。alias provider には default と異なるため `region = "us-east-1"` を明示する。
 
 ## 10. セキュリティ要件（`docs/security_prohibitions.md` 由来、必ず守る）
 
