@@ -101,22 +101,22 @@ done
 # --------------------------------------------------------------------------------
 echo ""
 echo "--- [6/6] Health Check ---"
-DOMAIN_NAME="${DOMAIN_NAME:-o2c.click}"
 HEALTH_FAILED=0
-if [ -n "${DOMAIN_NAME}" ]; then
-  echo "  Waiting 30s for services to stabilize..."
-  sleep 30
-  for lane in user admin; do
-    URL="https://${lane}.${DOMAIN_NAME}/health"
-    echo -n "  ${lane}: ${URL} → "
-    if curl -sf --max-time 10 "${URL}"; then
-      echo " OK"
-    else
-      echo " FAILED"
-      HEALTH_FAILED=1
-    fi
-  done
-fi
+echo "  Waiting 30s for services to stabilize..."
+sleep 30
+# Read per-lane hostnames from terraform output (apex / subdomain decision lives in locals.lanes).
+LANE_DOMAINS_JSON=$(terraform -chdir=terraform/project/environments/dev output -json lane_domains)
+for lane in $(echo "${LANE_DOMAINS_JSON}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin).keys()))'); do
+  HOST=$(echo "${LANE_DOMAINS_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)['${lane}'])")
+  URL="https://${HOST}/health"
+  echo -n "  ${lane}: ${URL} → "
+  if curl -sf --max-time 10 "${URL}"; then
+    echo " OK"
+  else
+    echo " FAILED"
+    HEALTH_FAILED=1
+  fi
+done
 
 echo ""
 if [ "${HEALTH_FAILED}" -eq 1 ]; then
