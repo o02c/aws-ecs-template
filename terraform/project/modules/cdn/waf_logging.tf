@@ -8,7 +8,7 @@
 # source region). No Firehose resource is created in us-east-1.
 
 resource "aws_wafv2_web_acl_logging_configuration" "this" {
-  provider = aws.us_east_1
+  region = "us-east-1"
 
   log_destination_configs = [var.waf_log_bucket_arn]
   resource_arn            = aws_wafv2_web_acl.this.arn
