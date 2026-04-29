@@ -9,4 +9,3 @@ plugins:
   - name: tfstate
     config:
       url: s3://o02c-terraform-management-tfstate-654654512164/myapp/dev/terraform.tfstate
-      profile: terraform
