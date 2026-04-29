@@ -100,7 +100,7 @@ module "lb" {
   private_subnet_ids    = module.network.private_subnet_ids
   alb_security_group_id = module.network.security_group_ids["${each.key}-alb"]
   ecs_security_group_id = module.network.security_group_ids["ecs"]
-  acm_certificate_arn   = module.dns.regional_certificate_arn
+  acm_certificate_arn   = module.cert.regional_certificate_arn
   idle_timeout_seconds  = local.alb_idle_timeout_seconds
   container_port        = local.container_port
   target_group          = local.lb_target_group
@@ -227,7 +227,7 @@ module "cdn" {
   s3_bucket_regional_domain_name = module.storage[each.key].bucket_regional_domain_name
   s3_bucket_id                   = module.storage[each.key].bucket_id
   cloudfront_oac_id              = module.storage[each.key].cloudfront_oac_id
-  acm_certificate_arn            = module.dns.cloudfront_certificate_arn
+  acm_certificate_arn            = module.cert.cloudfront_certificate_arn
   hostname                       = each.value.subdomain == "" ? var.domain_name : "${each.value.subdomain}.${var.domain_name}"
   route53_zone_id                = module.dns.zone_id
   enable_signing                 = local.cloudfront_signing_enabled
@@ -244,8 +244,11 @@ module "cdn" {
 }
 
 # --------------------------------------------------------------------------------
-# DNS / ACM
+# DNS (Route53 hosted zone + registrar NS sync)
 # --------------------------------------------------------------------------------
+# Lifecycle note: zone is created first so its name servers can be propagated to
+# the domain registrar. ACM certificates (module.cert) depend on that delegation
+# being in place for DNS validation to succeed.
 
 module "dns" {
   source = "../../modules/dns"
@@ -253,6 +256,19 @@ module "dns" {
   project_name = var.project_name
   environment  = var.environment
   domain_name  = var.domain_name
+}
+
+# --------------------------------------------------------------------------------
+# Certificates (ACM regional + CloudFront)
+# --------------------------------------------------------------------------------
+
+module "cert" {
+  source = "../../modules/cert"
+
+  project_name    = var.project_name
+  environment     = var.environment
+  domain_name     = var.domain_name
+  route53_zone_id = module.dns.zone_id
 }
 
 # --------------------------------------------------------------------------------
