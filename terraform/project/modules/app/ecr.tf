@@ -81,8 +81,6 @@ resource "aws_ecr_repository" "nginx" {
 # Auto-created cache repos are NOT managed by Terraform. See
 # justfile ecr-delete-cache and scripts/full-destroy.sh.
 
-data "aws_region" "current" {}
-
 resource "aws_ecr_pull_through_cache_rule" "ecr_public" {
   ecr_repository_prefix = "ecr-public"
   upstream_registry_url = "public.ecr.aws"

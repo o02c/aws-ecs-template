@@ -47,9 +47,9 @@ output "nginx_ecr_repository_url" {
   value       = module.app.nginx_ecr_repository_url
 }
 
-output "fluent_bit_init_image" {
-  description = "Fluent Bit init-latest image via pull-through cache"
-  value       = module.app.fluent_bit_init_image
+output "ecr_public_cache_base_uri" {
+  description = "Base URI of the ECR pull-through cache for public.ecr.aws (consumers append <namespace>/<repo>:<tag>)"
+  value       = module.app.ecr_public_cache_base_uri
 }
 
 output "fluent_bit_config_s3_arn" {
