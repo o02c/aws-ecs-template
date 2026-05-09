@@ -22,6 +22,10 @@ locals {
   # Firehose audit-log delivery buffering
   firehose_buffering_interval_seconds = 60
 
+  # FireLens (Fluent Bit) router's own diagnostic log group retention.
+  # App logs go to S3 via Firehose; this is just startup/error output.
+  fluent_bit_log_retention_days = 7
+
   # ALB idle timeout (connection keep-alive budget)
   alb_idle_timeout_seconds = 60
 

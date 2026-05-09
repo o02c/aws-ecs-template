@@ -221,8 +221,7 @@ graph TB
     subgraph ECR["ECR"]
         ECR_App["ECR Repository<br/>(per-service)"]
         ECR_Nginx["ECR Repository<br/>(nginx shared)"]
-        ECR_FluentBit["ECR Repository<br/>(fluent-bit shared)"]
-        ECR_Cache["Pull-Through Cache<br/>(public.ecr.aws)"]
+        ECR_Cache["Pull-Through Cache<br/>(public.ecr.aws → fluent-bit)"]
     end
 
     S3_Source --> EventBridge

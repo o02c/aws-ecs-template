@@ -177,22 +177,6 @@ build-nginx: ecr-login
     docker push "$IMAGE"
     echo "Pushed $IMAGE"
 
-# Mirror aws-for-fluent-bit:init-latest to private ECR
-# (Fargate private subnets can't pull from public.ecr.aws directly)
-# fluent-bit ECR repo uses MUTABLE tags to allow init-latest overwrite.
-mirror-fluent-bit: ecr-login
-    #!/usr/bin/env bash
-    set -euo pipefail
-    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
-    SRC="public.ecr.aws/aws-observability/aws-for-fluent-bit:init-latest"
-    DST="${ECR_REGISTRY}/{{project_name}}-{{environment}}-fluent-bit:init-latest"
-    echo "--- Mirror: ${SRC} -> ${DST} ---"
-    docker pull --platform linux/amd64 "$SRC"
-    docker tag "$SRC" "$DST"
-    docker push "$DST"
-    echo "Mirrored to $DST"
-
 # Build and push all images (apps + nginx), then save tag to .env
 build: build-nginx (build-one "user-api") (build-one "admin-api")
     #!/usr/bin/env bash

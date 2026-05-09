@@ -64,35 +64,22 @@ resource "aws_ecr_repository" "nginx" {
 }
 
 # --------------------------------------------------------------------------------
-# Fluent Bit ECR Repository (mirror of init-latest from public.ecr.aws)
-# --------------------------------------------------------------------------------
-
-resource "aws_ecr_repository" "fluent_bit" {
-  name                 = "${var.project_name}-${var.environment}-fluent-bit"
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-fluent-bit"
-  }
-}
-
-# --------------------------------------------------------------------------------
 # Pull-through Cache (public.ecr.aws -> private ECR)
 # --------------------------------------------------------------------------------
-# Fargate private subnets can't reach public.ecr.aws directly.
-# Pull-through cache auto-mirrors public images on first pull.
+# Fargate private subnets can't reach public.ecr.aws directly. Pull-through
+# cache lets ECR fetch upstream images on demand and serve them back through
+# the regional ECR VPCE — no NAT required, because the upstream pull is
+# initiated server-side from AWS IPs.
 # ref: https://docs.aws.amazon.com/AmazonECR/latest/userguide/pull-through-cache.html
+#
+# Used by:
+#   - aws-for-fluent-bit (FireLens log router init image; see fluent_bit_init_image output)
 #
 # Image URI format:
 #   <account>.dkr.ecr.<region>.amazonaws.com/ecr-public/<namespace>/<repo>:<tag>
 #
-# Auto-created cache repos must be deleted separately (not managed by Terraform).
-# See justfile ecr-delete-cache recipe.
+# Auto-created cache repos are NOT managed by Terraform. See
+# justfile ecr-delete-cache and scripts/full-destroy.sh.
 
 resource "aws_ecr_pull_through_cache_rule" "ecr_public" {
   ecr_repository_prefix = "ecr-public"

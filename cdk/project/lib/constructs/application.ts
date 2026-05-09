@@ -108,16 +108,10 @@ export class Application extends Construct {
     });
     this.ecrRepositories['nginx'] = nginxRepo;
 
-    // Shared fluent-bit repo (mutable tags)
-    const fluentBitRepo = new ecr.CfnRepository(this, 'EcrFluentBit', {
-      repositoryName: `${props.namePrefix}-fluent-bit`,
-      imageTagMutability: 'MUTABLE',
-      imageScanningConfiguration: { scanOnPush: true },
-      tags: [{ key: 'Name', value: `${props.namePrefix}-fluent-bit` }],
-    });
-    this.ecrRepositories['fluent-bit'] = fluentBitRepo;
-
-    // Pull-through cache rule
+    // Pull-through cache rule. Used for aws-for-fluent-bit init image (auto-cached
+    // on first pull from public.ecr.aws). No NAT needed: ECR fetches upstream
+    // server-side from AWS IPs.
+    // ref: https://docs.aws.amazon.com/AmazonECR/latest/userguide/pull-through-cache.html
     new ecr.CfnPullThroughCacheRule(this, 'PullThroughCache', {
       ecrRepositoryPrefix: 'ecr-public',
       upstreamRegistryUrl: 'public.ecr.aws',

@@ -105,8 +105,18 @@ variable "firehose_buffering_interval_seconds" {
   type        = number
 }
 
+variable "fluent_bit_log_retention_days" {
+  description = "CloudWatch Logs retention (days) for the FireLens (Fluent Bit) router's own diagnostic log group. Application logs go to S3 via Firehose; this group only captures the router's startup/errors."
+  type        = number
+}
+
 variable "aws_account_id" {
   description = "AWS account ID for globally unique bucket naming"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region (used for ECR registry URI construction)"
   type        = string
 }
 

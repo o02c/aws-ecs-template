@@ -27,6 +27,7 @@ module "network" {
 
   project_name            = var.project_name
   environment             = var.environment
+  aws_account_id          = data.aws_caller_identity.current.account_id
   vpc_cidr                = local.vpc_cidr
   public_subnets          = local.public_subnets
   private_subnets         = local.private_subnets

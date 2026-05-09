@@ -8,7 +8,7 @@
   containerDefinitions: [
     {
       name: 'log_router',
-      image: "{{ tfstate `output.fluent_bit_init_image` }}",
+      image: "{{ tfstate `output.ecr_public_cache_base_uri` }}/aws-observability/aws-for-fluent-bit:init-latest",
       essential: true,
       stopTimeout: 30,
       firelensConfiguration: {

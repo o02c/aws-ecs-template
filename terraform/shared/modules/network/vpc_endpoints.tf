@@ -1,10 +1,4 @@
 # --------------------------------------------------------------------------------
-# Data Sources
-# --------------------------------------------------------------------------------
-
-data "aws_caller_identity" "current" {}
-
-# --------------------------------------------------------------------------------
 # VPC Endpoint Policy
 # --------------------------------------------------------------------------------
 
@@ -27,7 +21,7 @@ locals {
         Resource  = "*"
         Condition = {
           StringNotEquals = {
-            "aws:PrincipalAccount" = data.aws_caller_identity.current.account_id
+            "aws:PrincipalAccount" = var.aws_account_id
           }
         }
       }

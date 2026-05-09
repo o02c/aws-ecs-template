@@ -2,9 +2,6 @@
 # CodeBuild Service Role
 # --------------------------------------------------------------------------------
 
-data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
-
 resource "aws_iam_role" "codebuild" {
   name = "${var.project_name}-${var.environment}-codebuild"
 
@@ -40,7 +37,7 @@ resource "aws_iam_role_policy" "codebuild" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
+        Resource = "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:*"
       },
       {
         Effect = "Allow"
@@ -71,14 +68,14 @@ resource "aws_iam_role_policy" "codebuild" {
           "ecr:BatchGetImage",
           "ecr:GetDownloadUrlForLayer"
         ]
-        Resource = "arn:aws:ecr:*:${data.aws_caller_identity.current.account_id}:repository/${var.project_name}-${var.environment}-*"
+        Resource = "arn:aws:ecr:*:${var.aws_account_id}:repository/${var.project_name}-${var.environment}-*"
       },
       {
         Effect = "Allow"
         Action = [
           "ecs:DescribeClusters"
         ]
-        Resource = "arn:aws:ecs:*:${data.aws_caller_identity.current.account_id}:cluster/${var.project_name}-${var.environment}"
+        Resource = "arn:aws:ecs:*:${var.aws_account_id}:cluster/${var.project_name}-${var.environment}"
       },
       {
         Effect = "Allow"
@@ -86,7 +83,7 @@ resource "aws_iam_role_policy" "codebuild" {
           "ecs:DescribeServices",
           "ecs:UpdateService"
         ]
-        Resource = "arn:aws:ecs:*:${data.aws_caller_identity.current.account_id}:service/${var.project_name}-${var.environment}/*"
+        Resource = "arn:aws:ecs:*:${var.aws_account_id}:service/${var.project_name}-${var.environment}/*"
       },
       {
         # ecs:DescribeTaskDefinition and ecs:RegisterTaskDefinition do not support
