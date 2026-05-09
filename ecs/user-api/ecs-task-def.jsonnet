@@ -83,7 +83,7 @@
         { sourceVolume: 'app-tmp', containerPath: '/tmp', readOnly: false },
       ],
       healthCheck: {
-        command: ['CMD-SHELL', "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""],
+        command: ['CMD-SHELL', "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')\""],
         interval: 15,
         timeout: 5,
         retries: 3,

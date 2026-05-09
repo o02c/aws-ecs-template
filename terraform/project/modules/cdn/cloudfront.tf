@@ -88,15 +88,14 @@ resource "aws_cloudfront_distribution" "this" {
     origin_access_control_id = var.cloudfront_oac_id
   }
 
-  # Default behavior (API → ALB)
+  # Default behavior — static assets from S3
   default_cache_behavior {
-    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods           = ["GET", "HEAD"]
-    target_origin_id         = "alb"
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
-    viewer_protocol_policy   = "redirect-to-https"
-    compress                 = true
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "s3"
+    cache_policy_id        = aws_cloudfront_cache_policy.static.id
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
   }
 
   # Signed file delivery (S3)
@@ -115,15 +114,16 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
-  # Static assets behavior (S3)
+  # API behavior (ALB)
   ordered_cache_behavior {
-    path_pattern           = "/assets/*"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "s3"
-    cache_policy_id        = aws_cloudfront_cache_policy.static.id
-    viewer_protocol_policy = "redirect-to-https"
-    compress               = true
+    path_pattern             = var.api_path_pattern
+    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods           = ["GET", "HEAD"]
+    target_origin_id         = "alb"
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+    viewer_protocol_policy   = "redirect-to-https"
+    compress                 = true
   }
 
   restrictions {

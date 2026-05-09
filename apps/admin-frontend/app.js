@@ -4,7 +4,7 @@ const statsEl = document.getElementById("stats");
 
 async function checkHealth() {
   try {
-    const res = await fetch("/health");
+    const res = await fetch("/api/health");
     const data = await res.json();
     statusEl.textContent = `API Status: ${data.status} (${data.service})`;
     statusEl.className = "ok";
