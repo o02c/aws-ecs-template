@@ -284,9 +284,9 @@ s3-empty:
 # Simple HTTPS health check (both lanes)
 check:
     @echo "--- user ---"
-    @curl -sf https://user.{{domain_name}}/health && echo ""
+    @curl -sf https://{{domain_name}}/api/health && echo ""
     @echo "--- admin ---"
-    @curl -sf https://admin.{{domain_name}}/health && echo ""
+    @curl -sf https://admin.{{domain_name}}/api/health && echo ""
 
 # Full verify: HTTPS, TLS, every log destination, bucket posture
 verify-deploy:

@@ -103,7 +103,7 @@ sleep 30
 LANE_DOMAINS_JSON=$(terraform -chdir=terraform/project/environments/dev output -json lane_domains)
 for lane in $(echo "${LANE_DOMAINS_JSON}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin).keys()))'); do
   HOST=$(echo "${LANE_DOMAINS_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)['${lane}'])")
-  URL="https://${HOST}/health"
+  URL="https://${HOST}/api/health"
   echo -n "  ${lane}: ${URL} → "
   if curl -sf --max-time 10 "${URL}"; then
     echo " OK"

@@ -111,3 +111,9 @@ variable "cache_ttl" {
   })
 }
 
+variable "api_path_pattern" {
+  description = "Path pattern routed to the ALB origin. All other paths are served from S3 (static) by the default behavior."
+  type        = string
+  default     = "/api/*"
+}
+

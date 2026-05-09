@@ -42,7 +42,7 @@ echo "=== Verify Deploy: ${PROJECT_NAME}-${ENVIRONMENT} @ ${DOMAIN_NAME} ==="
 echo ""
 echo "--- [1/9] HTTPS Health ---"
 for lane in "${LANES[@]}"; do
-  url="https://$(lane_fqdn "$lane")/health"
+  url="https://$(lane_fqdn "$lane")/api/health"
   code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
   if [ "$code" = "200" ]; then
     ok "${url} → 200"
@@ -84,7 +84,7 @@ echo ""
 echo "--- [3/9] Generate traffic (3 requests per lane) ---"
 for lane in "${LANES[@]}"; do
   for _ in 1 2 3; do
-    curl -sSk --max-time 10 "https://$(lane_fqdn "$lane")/health" > /dev/null 2>&1 || true
+    curl -sSk --max-time 10 "https://$(lane_fqdn "$lane")/api/health" > /dev/null 2>&1 || true
   done
 done
 echo "  Waiting 120s for downstream log pipelines (Firehose 60s buffer, VPC flow ~1min)..."

@@ -231,6 +231,7 @@ module "cdn" {
   enable_signing                 = local.cloudfront_signing_enabled
   signing_public_key_pem         = local.cloudfront_signing_public_key_pem
   files_path_pattern             = local.signed_files_path_pattern
+  api_path_pattern               = local.api_path_pattern
   waf_rate_limit                 = local.waf_rate_limit
   geo_restriction_locations      = local.geo_restriction_locations
   cache_ttl                      = local.cache_ttl
