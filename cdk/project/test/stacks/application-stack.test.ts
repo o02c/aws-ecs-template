@@ -91,14 +91,6 @@ describe('ApplicationStack', () => {
     });
   });
 
-  test('creates shared fluent-bit ECR repository with mutable tags', () => {
-    template.hasResourceProperties('AWS::ECR::Repository', {
-      RepositoryName: 'myapp-dev-fluent-bit',
-      ImageTagMutability: 'MUTABLE',
-      ImageScanningConfiguration: { ScanOnPush: true },
-    });
-  });
-
   test('creates ECR repositories with lifecycle policy (keep last 10)', () => {
     template.hasResourceProperties('AWS::ECR::Repository', {
       RepositoryName: 'myapp-dev-user-api',

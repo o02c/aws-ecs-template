@@ -52,7 +52,7 @@ description: Terraform ベースの deploy / 疎通確認 / destroy の標準手
 1. **shared TF**：`terraform init -upgrade` → `apply -auto-approve`。VPC・TGW・KMS・IAM を作成。
 2. **project TF**：同様に init → apply。ECS cluster・ECR・ALB・CloudFront・S3 などを作成。
 3. **SSM Parameter Store**：Django secret key を `openssl rand -hex 32` で生成し、placeholder のときだけ上書き。
-4. **Docker build & push**：`ecs/nginx` と `apps/{user-api, admin-api}` を `linux/amd64` でビルドし ECR へ push。aws-for-fluent-bit:init-latest を private ECR にミラー。
+4. **Docker build & push**：`ecs/nginx` と `apps/{user-api, admin-api}` を `linux/amd64` でビルドし ECR へ push。aws-for-fluent-bit:init-latest は ECR pull-through cache が初回 pull 時に自動キャッシュするので手動ミラーなし。
 5. **ECS deploy**：各サービスで `ecspresso deploy`（`IMAGE_TAG` と `NGINX_IMAGE_TAG` を渡す）。
 6. **Health check**：30 秒待機後、`https://{user,admin}.${DOMAIN_NAME}/health` に `curl -sf --max-time 10`。1 つでも失敗したら exit 1。
 

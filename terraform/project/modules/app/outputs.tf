@@ -29,8 +29,8 @@ output "nginx_ecr_repository_url" {
 }
 
 output "fluent_bit_init_image" {
-  description = "Fluent Bit init-latest image URI (mirrored to private ECR)"
-  value       = "${aws_ecr_repository.fluent_bit.repository_url}:init-latest"
+  description = "Fluent Bit init-latest image URI served via ECR pull-through cache (auto-cached on first pull from public.ecr.aws/aws-observability/aws-for-fluent-bit)"
+  value       = "${var.aws_account_id}.dkr.ecr.${data.aws_region.current.region}.amazonaws.com/${aws_ecr_pull_through_cache_rule.ecr_public.ecr_repository_prefix}/aws-observability/aws-for-fluent-bit:init-latest"
 }
 
 output "fluent_bit_config_s3_arn" {

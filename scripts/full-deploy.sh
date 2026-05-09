@@ -71,13 +71,8 @@ for service in user-api admin-api; do
   docker push "${APP_IMAGE}"
 done
 
-# Mirror fluent-bit
-FLUENT_SRC="public.ecr.aws/aws-observability/aws-for-fluent-bit:init-latest"
-FLUENT_DST="${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-fluent-bit:init-latest"
-echo "  Mirroring fluent-bit..."
-docker pull --platform linux/amd64 "${FLUENT_SRC}"
-docker tag "${FLUENT_SRC}" "${FLUENT_DST}"
-docker push "${FLUENT_DST}"
+# fluent-bit init image is served via ECR pull-through cache (auto-cached on
+# first pull from public.ecr.aws). No manual mirror step required.
 
 # Save image tag
 if grep -q '^IMAGE_TAG=' .env 2>/dev/null; then
