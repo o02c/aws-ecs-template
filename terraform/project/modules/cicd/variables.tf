@@ -8,6 +8,16 @@ variable "environment" {
   type        = string
 }
 
+variable "aws_account_id" {
+  description = "AWS account ID"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+}
+
 variable "ecs_cluster_name" {
   description = "ECS cluster name"
   type        = string

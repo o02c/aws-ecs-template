@@ -73,6 +73,8 @@ module "db" {
 
   project_name          = var.project_name
   environment           = var.environment
+  aws_account_id        = data.aws_caller_identity.current.account_id
+  aws_region            = local.aws_region
   vpc_id                = module.network.vpc_id
   private_subnet_ids    = module.network.private_subnet_ids
   db_security_group_id  = module.network.security_group_ids["db"]
@@ -156,6 +158,7 @@ module "app" {
   secrets_kms_key_arn                 = module.kms.key_arns["secrets"]
   logs_kms_key_arn                    = module.kms.key_arns["logs"]
   aws_account_id                      = data.aws_caller_identity.current.account_id
+  aws_region                          = local.aws_region
   s3_kms_key_arn                      = module.kms.key_arns["s3"]
   log_bucket_id                       = module.logging.bucket_id
   container_port                      = local.container_port
@@ -288,6 +291,8 @@ module "cert" {
 #
 #   project_name        = var.project_name
 #   environment         = var.environment
+#   aws_account_id      = data.aws_caller_identity.current.account_id
+#   aws_region          = local.aws_region
 #   ecs_cluster_name    = module.app.ecs_cluster_name
 #   ecr_repository_urls = module.app.ecr_repository_urls
 #   services            = local.services

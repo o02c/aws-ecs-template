@@ -115,6 +115,11 @@ variable "aws_account_id" {
   type        = string
 }
 
+variable "aws_region" {
+  description = "AWS region (used for ECR registry URI construction)"
+  type        = string
+}
+
 variable "s3_kms_key_arn" {
   description = "KMS key ARN for S3 encryption (Firehose destinations)"
   type        = string
