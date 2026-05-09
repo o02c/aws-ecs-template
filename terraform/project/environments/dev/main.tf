@@ -160,6 +160,7 @@ module "app" {
   log_bucket_id                       = module.logging.bucket_id
   container_port                      = local.container_port
   firehose_buffering_interval_seconds = local.firehose_buffering_interval_seconds
+  fluent_bit_log_retention_days       = local.fluent_bit_log_retention_days
   email_enabled                       = local.email.enabled
   email_policy_arn                    = local.email.enabled ? one([for _, m in module.email : m.policy_arn]) : ""
 }
