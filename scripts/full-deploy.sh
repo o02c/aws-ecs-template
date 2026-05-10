@@ -60,7 +60,7 @@ aws ecr get-login-password --region ${AWS_REGION} | \
 # Build and push nginx
 NGINX_IMAGE="${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-nginx:${IMAGE_TAG}"
 echo "  Building nginx..."
-docker build --platform linux/amd64 -t "${NGINX_IMAGE}" ecs/nginx
+docker build --platform linux/amd64 -t "${NGINX_IMAGE}" apps/nginx
 docker push "${NGINX_IMAGE}"
 
 # Build and push app services

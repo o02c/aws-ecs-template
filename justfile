@@ -119,7 +119,7 @@ build-nginx: ecr-login
     ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.{{aws_region}}.amazonaws.com"
     IMAGE="${ECR_REGISTRY}/{{project_name}}-{{environment}}-nginx:{{image_tag}}"
     echo "--- Build: nginx ({{image_tag}}) ---"
-    docker build --platform linux/amd64 -t "$IMAGE" "ecs/nginx"
+    docker build --platform linux/amd64 -t "$IMAGE" "apps/nginx"
     docker push "$IMAGE"
     echo "Pushed $IMAGE"
 
