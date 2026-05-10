@@ -99,11 +99,11 @@ echo "--- [6/6] Health Check ---"
 HEALTH_FAILED=0
 echo "  Waiting 30s for services to stabilize..."
 sleep 30
-# Read per-lane hostnames from terraform output (apex / subdomain decision lives in locals.lanes).
-LANE_DOMAINS_JSON=$(terraform -chdir=terraform/project/environments/dev output -json lane_domains)
-for lane in $(echo "${LANE_DOMAINS_JSON}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin).keys()))'); do
-  HOST=$(echo "${LANE_DOMAINS_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)['${lane}'])")
-  URL="https://${HOST}/api/health"
+# Read per-lane URL prefixes from terraform output (single domain + path prefix per lane).
+LANE_URL_PREFIXES_JSON=$(terraform -chdir=terraform/project/environments/dev output -json lane_url_prefixes)
+for lane in $(echo "${LANE_URL_PREFIXES_JSON}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin).keys()))'); do
+  PREFIX=$(echo "${LANE_URL_PREFIXES_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)['${lane}'])")
+  URL="${PREFIX}/api/health"
   echo -n "  ${lane}: ${URL} → "
   if curl -sf --max-time 10 "${URL}"; then
     echo " OK"

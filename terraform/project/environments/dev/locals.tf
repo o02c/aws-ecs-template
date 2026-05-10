@@ -53,10 +53,6 @@ locals {
   # Signed URL path pattern (for CloudFront signing feature)
   signed_files_path_pattern = "/files/*"
 
-  # CloudFront ALB path pattern. Default behavior serves S3 (static); this pattern
-  # routes to the ALB origin (API).
-  api_path_pattern = "/api/*"
-
   # Email (SES sandbox). Set enabled = false to skip all SES / Route53 records.
   # After apply, verify_recipients receive a confirmation email from AWS that
   # must be clicked manually in Gmail. The domain DKIM is auto-verified.
@@ -120,11 +116,19 @@ locals {
     }
   }
 
-  # subdomain = "" puts the lane on the apex domain (customer-facing).
-  # Non-empty subdomain serves that subdomain (e.g. admin).
+  # All lanes share a single apex domain; CloudFront picks the lane by path.
+  # Exactly one lane must have an empty path_prefix (it serves the default behavior).
+  # API endpoints live at ${path_prefix}/api/*; static assets at ${path_prefix}*.
   lanes = {
-    user  = { subdomain = "" }
-    admin = { subdomain = "admin" }
+    user  = { path_prefix = "" }
+    admin = { path_prefix = "/admin" }
+  }
+
+  # WAF IP allowlist. scope = "admin" gates only the non-default lane's path
+  # (e.g. /admin*); "global" gates every request. Empty allowed_cidrs disables.
+  ip_allowlist = {
+    scope         = "admin"
+    allowed_cidrs = []
   }
 
   azs = ["${local.aws_region}a", "${local.aws_region}c"]

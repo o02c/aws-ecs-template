@@ -38,60 +38,6 @@ destroy: _confirm-destroy
     bash scripts/full-destroy.sh
 
 # --------------------------------------------------------------------------------
-# CDK - Shared
-# --------------------------------------------------------------------------------
-
-# Synth CDK shared stacks
-cdk-shared-synth env="dev":
-    cd cdk/shared && npx cdk synth -c env={{env}}
-
-# Diff CDK shared stacks
-cdk-shared-diff env="dev":
-    cd cdk/shared && npx cdk diff -c env={{env}}
-
-# Deploy CDK shared stacks
-cdk-shared-deploy env="dev":
-    cd cdk/shared && npx cdk deploy -c env={{env}} --all --require-approval broadening
-
-# Destroy CDK shared stacks
-cdk-shared-destroy env="dev":
-    cd cdk/shared && npx cdk destroy -c env={{env}} --all --force
-
-# --------------------------------------------------------------------------------
-# CDK - Project
-# --------------------------------------------------------------------------------
-
-# Synth CDK project stacks
-cdk-project-synth env="dev":
-    cd cdk/project && npx cdk synth -c env={{env}}
-
-# Diff CDK project stacks
-cdk-project-diff env="dev":
-    cd cdk/project && npx cdk diff -c env={{env}}
-
-# Deploy CDK project stacks
-cdk-project-deploy env="dev":
-    cd cdk/project && npx cdk deploy -c env={{env}} --all --require-approval broadening
-
-# Destroy CDK project stacks
-cdk-project-destroy env="dev":
-    cd cdk/project && npx cdk destroy -c env={{env}} --all --force
-
-# --------------------------------------------------------------------------------
-# CDK - Full deploy/destroy cycle
-# --------------------------------------------------------------------------------
-
-# CDK - Full deploy cycle (shared -> project)
-cdk-deploy-all env="dev":
-    cd cdk/shared && npx cdk deploy -c env={{env}} --all --require-approval broadening
-    cd cdk/project && npx cdk deploy -c env={{env}} --all --require-approval broadening
-
-# CDK - Full destroy cycle (project -> shared, reverse order)
-cdk-destroy-all env="dev":
-    cd cdk/project && npx cdk destroy -c env={{env}} --all --force
-    cd cdk/shared && npx cdk destroy -c env={{env}} --all --force
-
-# --------------------------------------------------------------------------------
 # Terraform - Shared
 # --------------------------------------------------------------------------------
 
@@ -141,7 +87,7 @@ project-destroy:
     terraform -chdir=terraform/project/environments/{{environment}} destroy -auto-approve
     -aws logs delete-log-group --log-group-name "/aws/vpc/flow-log/{{project_name}}-{{environment}}" 2>/dev/null || true
     -for svc in user-api admin-api; do aws logs delete-log-group --log-group-name "/ecs/{{project_name}}-{{environment}}/$svc" 2>/dev/null || true; done
-    -for lane in user admin; do aws logs delete-log-group --region us-east-1 --log-group-name "aws-waf-logs-{{project_name}}-{{environment}}-$lane" 2>/dev/null || true; done
+    -aws logs delete-log-group --region us-east-1 --log-group-name "aws-waf-logs-{{project_name}}-{{environment}}" 2>/dev/null || true
 
 # --------------------------------------------------------------------------------
 # Docker Build & Push
@@ -281,12 +227,12 @@ s3-empty:
 # Utility
 # --------------------------------------------------------------------------------
 
-# Simple HTTPS health check (both lanes)
+# Simple HTTPS health check (both lanes, single domain with path prefix)
 check:
     @echo "--- user ---"
     @curl -sf https://{{domain_name}}/api/health && echo ""
     @echo "--- admin ---"
-    @curl -sf https://admin.{{domain_name}}/api/health && echo ""
+    @curl -sf https://{{domain_name}}/admin/api/health && echo ""
 
 # Full verify: HTTPS, TLS, every log destination, bucket posture
 verify-deploy:

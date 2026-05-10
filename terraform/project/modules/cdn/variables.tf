@@ -8,34 +8,22 @@ variable "environment" {
   type        = string
 }
 
-variable "lane" {
-  description = "Traffic lane identifier"
-  type        = string
-}
+variable "lanes" {
+  description = "Per-lane data feeding the single CloudFront distribution. The lane with empty path_prefix serves the default behavior; others get an ordered behavior matching <path_prefix>*."
+  type = map(object({
+    path_prefix                    = string
+    alb_arn                        = string
+    alb_dns_name                   = string
+    alb_security_group_id          = string
+    s3_bucket_regional_domain_name = string
+    s3_bucket_id                   = string
+    cloudfront_oac_id              = string
+  }))
 
-variable "alb_dns_name" {
-  description = "ALB DNS name for VPC origin"
-  type        = string
-}
-
-variable "alb_arn" {
-  description = "ALB ARN for VPC origin"
-  type        = string
-}
-
-variable "s3_bucket_regional_domain_name" {
-  description = "S3 bucket regional domain name"
-  type        = string
-}
-
-variable "s3_bucket_id" {
-  description = "S3 bucket ID"
-  type        = string
-}
-
-variable "cloudfront_oac_id" {
-  description = "CloudFront Origin Access Control ID"
-  type        = string
+  validation {
+    condition     = length([for _, v in var.lanes : v if v.path_prefix == ""]) == 1
+    error_message = "Exactly one lane must have an empty path_prefix (it serves the default cache behavior)."
+  }
 }
 
 variable "acm_certificate_arn" {
@@ -44,7 +32,7 @@ variable "acm_certificate_arn" {
 }
 
 variable "hostname" {
-  description = "Public FQDN for this lane (CloudFront alias, Route53 A-alias, origin Host header)"
+  description = "Public FQDN for the distribution (CloudFront alias, Route53 A-alias, ALB origin Host header)"
   type        = string
 }
 
@@ -54,7 +42,7 @@ variable "route53_zone_id" {
 }
 
 variable "enable_signing" {
-  description = "Enable CloudFront signed URL support"
+  description = "Enable CloudFront signed URL support (applied to the default lane's S3 origin via signed_files_path_pattern)"
   type        = bool
 }
 
@@ -64,13 +52,29 @@ variable "signing_public_key_pem" {
 }
 
 variable "files_path_pattern" {
-  description = "Path pattern for signed file delivery"
+  description = "Path pattern routed to the default lane's S3 origin behind a trusted key group (signed URLs)"
   type        = string
 }
 
 variable "waf_rate_limit" {
   description = "Maximum number of requests per 5-minute period per IP"
   type        = number
+}
+
+variable "ip_allowlist" {
+  description = "Optional WAF IP allowlist. scope=\"admin\" gates only the non-default lane's path; scope=\"global\" gates all paths. Empty allowed_cidrs disables the rule entirely."
+  type = object({
+    scope         = string
+    allowed_cidrs = list(string)
+  })
+  default = {
+    scope         = "admin"
+    allowed_cidrs = []
+  }
+  validation {
+    condition     = contains(["admin", "global"], var.ip_allowlist.scope)
+    error_message = "ip_allowlist.scope must be either \"admin\" or \"global\"."
+  }
 }
 
 variable "geo_restriction_locations" {
@@ -94,12 +98,7 @@ variable "log_prefix" {
 }
 
 variable "vpc_id" {
-  description = "VPC ID where ALB resides (for VPC Origin SG lookup)"
-  type        = string
-}
-
-variable "alb_security_group_id" {
-  description = "ALB security group ID to add CloudFront VPC Origin ingress rule"
+  description = "VPC ID where ALBs reside (for VPC Origin SG lookup)"
   type        = string
 }
 
@@ -110,10 +109,3 @@ variable "cache_ttl" {
     max_seconds     = number
   })
 }
-
-variable "api_path_pattern" {
-  description = "Path pattern routed to the ALB origin. All other paths are served from S3 (static) by the default behavior."
-  type        = string
-  default     = "/api/*"
-}
-

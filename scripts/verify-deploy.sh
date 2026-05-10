@@ -12,15 +12,17 @@ ENVIRONMENT="dev"
 DOMAIN_NAME="${DOMAIN_NAME:-o2c.click}"
 LANES=(user admin)
 
-# Lane-to-FQDN lookup. Must mirror terraform locals.lanes.subdomain values:
-# empty subdomain → apex, non-empty → subdomain. Bash 3 on macOS lacks
-# associative arrays, so this is a case statement rather than a map.
-lane_fqdn() {
+# Lane → URL path prefix (mirrors terraform locals.lanes.path_prefix).
+# Bash 3 on macOS lacks associative arrays, so this is a case statement.
+lane_path_prefix() {
   case "$1" in
-    user)  echo "${DOMAIN_NAME}" ;;
-    admin) echo "admin.${DOMAIN_NAME}" ;;
-    *)     echo "UNKNOWN-$1" ;;
+    user)  echo "" ;;
+    admin) echo "/admin" ;;
+    *)     echo "/UNKNOWN-$1" ;;
   esac
+}
+lane_url() {
+  echo "https://${DOMAIN_NAME}$(lane_path_prefix "$1")"
 }
 # SERVICES intentionally not listed — ECS logs skip CloudWatch and go through
 # Firehose → S3 ${ACCESS_LOG_BUCKET}/ecs-logs/ and ${ACCESS_LOG_BUCKET}/audit/.
@@ -37,12 +39,12 @@ fail() { echo "  FAIL  $*"; FAILED=1; }
 echo "=== Verify Deploy: ${PROJECT_NAME}-${ENVIRONMENT} @ ${DOMAIN_NAME} ==="
 
 # --------------------------------------------------------------------------------
-# 1. HTTPS health check (all lanes)
+# 1. HTTPS health check (all lanes — single domain, path-routed)
 # --------------------------------------------------------------------------------
 echo ""
 echo "--- [1/9] HTTPS Health ---"
 for lane in "${LANES[@]}"; do
-  url="https://$(lane_fqdn "$lane")/api/health"
+  url="$(lane_url "$lane")/api/health"
   code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
   if [ "$code" = "200" ]; then
     ok "${url} → 200"
@@ -52,30 +54,25 @@ for lane in "${LANES[@]}"; do
 done
 
 # --------------------------------------------------------------------------------
-# 2. TLS / cert hygiene
+# 2. TLS / cert hygiene (single host)
 # --------------------------------------------------------------------------------
 echo ""
 echo "--- [2/9] TLS / Certificate ---"
-for lane in "${LANES[@]}"; do
-  host="$(lane_fqdn "$lane")"
-  tls_info=$(echo | openssl s_client -connect "${host}:443" -servername "${host}" -brief 2>&1 | grep -E 'Protocol version|Ciphersuite|Verification' || true)
-  protocol=$(echo "$tls_info" | grep 'Protocol version' | awk -F': ' '{print $2}')
-  verification=$(echo "$tls_info" | grep '^Verification' | awk -F': ' '{print $2}')
-  if [[ "$protocol" == "TLSv1.3" || "$protocol" == "TLSv1.2" ]] && [[ "$verification" == "OK" ]]; then
-    ok "${host} ${protocol} cert:${verification}"
-  else
-    fail "${host} protocol=${protocol:-n/a} cert=${verification:-n/a}"
-  fi
-done
+host="${DOMAIN_NAME}"
+tls_info=$(echo | openssl s_client -connect "${host}:443" -servername "${host}" -brief 2>&1 | grep -E 'Protocol version|Ciphersuite|Verification' || true)
+protocol=$(echo "$tls_info" | grep 'Protocol version' | awk -F': ' '{print $2}')
+verification=$(echo "$tls_info" | grep '^Verification' | awk -F': ' '{print $2}')
+if [[ "$protocol" == "TLSv1.3" || "$protocol" == "TLSv1.2" ]] && [[ "$verification" == "OK" ]]; then
+  ok "${host} ${protocol} cert:${verification}"
+else
+  fail "${host} protocol=${protocol:-n/a} cert=${verification:-n/a}"
+fi
 
-for lane in "${LANES[@]}"; do
-  host="$(lane_fqdn "$lane")"
-  if echo | openssl s_client -connect "${host}:443" -servername "${host}" -tls1_1 2>&1 | grep -q 'Cipher is'; then
-    fail "${host} accepted TLS 1.1"
-  else
-    ok "${host} refused TLS 1.1"
-  fi
-done
+if echo | openssl s_client -connect "${host}:443" -servername "${host}" -tls1_1 2>&1 | grep -q 'Cipher is'; then
+  fail "${host} accepted TLS 1.1"
+else
+  ok "${host} refused TLS 1.1"
+fi
 
 # --------------------------------------------------------------------------------
 # 3. Generate traffic to populate log destinations
@@ -84,7 +81,7 @@ echo ""
 echo "--- [3/9] Generate traffic (3 requests per lane) ---"
 for lane in "${LANES[@]}"; do
   for _ in 1 2 3; do
-    curl -sSk --max-time 10 "https://$(lane_fqdn "$lane")/api/health" > /dev/null 2>&1 || true
+    curl -sSk --max-time 10 "$(lane_url "$lane")/api/health" > /dev/null 2>&1 || true
   done
 done
 echo "  Waiting 120s for downstream log pipelines (Firehose 60s buffer, VPC flow ~1min)..."
@@ -136,24 +133,21 @@ check_s3_prefix() {
   fi
 }
 
-# ALB access logs
+# ALB access logs (per-lane ALB → per-lane prefix)
 for lane in "${LANES[@]}"; do
   check_s3_prefix "$ACCESS_LOG_BUCKET" "alb/${lane}/" "ALB ${lane}"
 done
-# CloudFront access logs
-for lane in "${LANES[@]}"; do
-  check_s3_prefix "$ACCESS_LOG_BUCKET" "cloudfront/${lane}/" "CloudFront ${lane}"
-done
-# S3 bucket access logs (asset buckets)
+# CloudFront access logs (single distribution → single prefix)
+check_s3_prefix "$ACCESS_LOG_BUCKET" "cloudfront/" "CloudFront"
+# S3 bucket access logs (asset buckets stay per-lane)
 for lane in "${LANES[@]}"; do
   check_s3_prefix "$ACCESS_LOG_BUCKET" "s3/${lane}/" "S3 asset-access ${lane}" 0
 done
-# WAF logs (direct S3 delivery — dedicated aws-waf-logs-* bucket; key layout
-# is AWS-managed: AWSLogs/<account>/WAFLogs/cloudfront/<webacl>/...
-# — for scope=CLOUDFRONT the path segment is literally `cloudfront`, not `us-east-1`)
-for lane in "${LANES[@]}"; do
-  check_s3_prefix "$WAF_LOG_BUCKET" "AWSLogs/${ACCOUNT_ID}/WAFLogs/cloudfront/${PROJECT_NAME}-${ENVIRONMENT}-${lane}/" "WAF ${lane} (direct S3)" 0
-done
+# WAF logs (single web ACL → single prefix). Direct S3 delivery to the dedicated
+# aws-waf-logs-* bucket; key layout is AWS-managed:
+# AWSLogs/<account>/WAFLogs/cloudfront/<webacl>/... — for scope=CLOUDFRONT the
+# path segment is literally `cloudfront`, not `us-east-1`.
+check_s3_prefix "$WAF_LOG_BUCKET" "AWSLogs/${ACCOUNT_ID}/WAFLogs/cloudfront/${PROJECT_NAME}-${ENVIRONMENT}/" "WAF (direct S3)" 0
 # ECS container logs (via Firehose, all non-audit records)
 check_s3_prefix "$ACCESS_LOG_BUCKET" "ecs-logs/" "ECS logs (Firehose)" 0
 # Audit records (type=audit, Firehose separated)
@@ -266,24 +260,24 @@ fi
 echo ""
 echo "--- [9/9] CloudFront Signed URL E2E ---"
 
-user_fqdn=$(lane_fqdn user)
+user_url=$(lane_url user)
 test_file="/tmp/verify-deploy-signed-url-$$.txt"
 echo "verify-deploy signed URL probe $(date +%s)" > "$test_file"
 
-upload_resp=$(curl -sSk --max-time 30 -X POST "https://${user_fqdn}/api/files/upload" -F "file=@${test_file}" 2>/dev/null || echo "")
+upload_resp=$(curl -sSk --max-time 30 -X POST "${user_url}/api/files/upload" -F "file=@${test_file}" 2>/dev/null || echo "")
 file_id=$(echo "$upload_resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("file_id",""))' 2>/dev/null || echo "")
 
 if [ -z "$file_id" ]; then
   fail "signed URL probe: upload failed (${upload_resp:0:80})"
 else
-  url_resp=$(curl -sSk --max-time 30 "https://${user_fqdn}/api/files/${file_id}/url?ext=.txt&ttl=300" 2>/dev/null || echo "")
+  url_resp=$(curl -sSk --max-time 30 "${user_url}/api/files/${file_id}/url?ext=.txt&ttl=300" 2>/dev/null || echo "")
   signed_url=$(echo "$url_resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("url",""))' 2>/dev/null || echo "")
 
   if [ -z "$signed_url" ]; then
     fail "signed URL probe: issue failed (${url_resp:0:80})"
   else
     signed_code=$(curl -sSk --max-time 30 -o /dev/null -w '%{http_code}' "$signed_url" 2>/dev/null || echo "000")
-    unsigned_code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "https://${user_fqdn}/files/${file_id}.txt" 2>/dev/null || echo "000")
+    unsigned_code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "${user_url}/files/${file_id}.txt" 2>/dev/null || echo "000")
     if [ "$signed_code" = "200" ] && [ "$unsigned_code" = "403" ]; then
       ok "signed URL: signed=${signed_code} unsigned=${unsigned_code}"
     else

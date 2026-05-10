@@ -45,12 +45,20 @@ deploy_backend() {
 # --------------------------------------------------------------------------------
 # Upload Frontend
 # --------------------------------------------------------------------------------
+# Path-routing: each lane's frontend is uploaded under its CloudFront path_prefix
+# so that https://<domain><path_prefix>/index.html resolves directly. The default
+# lane (user) lives at the bucket root so `default_root_object = "index.html"`
+# serves https://<domain>/ . Non-default lanes use their prefix as the S3 key.
 deploy_frontend() {
   local lane="$1"
   local bucket="$PROJECT_NAME-$ENVIRONMENT-$lane-assets"
+  local s3_prefix=""
+  if [ "$lane" != "user" ]; then
+    s3_prefix="${lane}/"
+  fi
 
-  echo "--- Upload frontend: $lane ---"
-  aws s3 sync "$PROJECT_ROOT/apps/$lane-frontend/" "s3://$bucket/assets/" \
+  echo "--- Upload frontend: $lane (s3://${bucket}/${s3_prefix}) ---"
+  aws s3 sync "$PROJECT_ROOT/apps/$lane-frontend/" "s3://$bucket/$s3_prefix" \
     --delete --exclude ".*"
 }
 
@@ -77,8 +85,8 @@ case "$TARGET" in
     done
     echo ""
     echo "=== Deploy Complete ==="
-    echo "User:  https://user.o2c.click/health"
-    echo "Admin: https://admin.o2c.click/health"
+    echo "User:  https://o2c.click/api/health"
+    echo "Admin: https://o2c.click/admin/api/health"
     ;;
   *)
     echo "Usage: $0 [user-api|admin-api|frontend|all]"

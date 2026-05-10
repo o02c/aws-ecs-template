@@ -1,10 +1,14 @@
 # --------------------------------------------------------------------------------
-# S3 Bucket Policy (CloudFront OAC + SSL enforcement)
+# S3 Bucket Policy (CloudFront OAC + SSL enforcement, per-lane bucket)
 # --------------------------------------------------------------------------------
-# A bucket can only have one aws_s3_bucket_policy; merge both statements here.
+# Each lane's asset bucket gets a single policy combining the OAC GetObject
+# allow and the SSL-only deny. The single distribution ARN is the SourceArn
+# for every lane's bucket.
 
 resource "aws_s3_bucket_policy" "this" {
-  bucket = var.s3_bucket_id
+  for_each = var.lanes
+
+  bucket = each.value.s3_bucket_id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -16,7 +20,7 @@ resource "aws_s3_bucket_policy" "this" {
           Service = "cloudfront.amazonaws.com"
         }
         Action   = "s3:GetObject"
-        Resource = "arn:aws:s3:::${var.s3_bucket_id}/*"
+        Resource = "arn:aws:s3:::${each.value.s3_bucket_id}/*"
         Condition = {
           StringEquals = {
             "AWS:SourceArn" = aws_cloudfront_distribution.this.arn
@@ -29,8 +33,8 @@ resource "aws_s3_bucket_policy" "this" {
         Principal = "*"
         Action    = "s3:*"
         Resource = [
-          "arn:aws:s3:::${var.s3_bucket_id}",
-          "arn:aws:s3:::${var.s3_bucket_id}/*",
+          "arn:aws:s3:::${each.value.s3_bucket_id}",
+          "arn:aws:s3:::${each.value.s3_bucket_id}/*",
         ]
         Condition = {
           Bool = {

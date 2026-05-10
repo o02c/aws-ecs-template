@@ -58,12 +58,22 @@ output "fluent_bit_config_s3_arn" {
 }
 
 
-output "lane_domains" {
-  description = "Map of lane to FQDN (empty subdomain → apex domain)"
+output "domain_name" {
+  description = "Single public FQDN (all lanes share this; path_prefix selects the lane)"
+  value       = var.domain_name
+}
+
+output "lane_url_prefixes" {
+  description = "Map of lane to base URL (https://<domain><path_prefix>); consumers append /api/health etc."
   value = {
     for lane, cfg in local.lanes :
-    lane => cfg.subdomain == "" ? var.domain_name : "${cfg.subdomain}.${var.domain_name}"
+    lane => "https://${var.domain_name}${cfg.path_prefix}"
   }
+}
+
+output "lane_path_prefixes" {
+  description = "Map of lane to URL path prefix (\"\" for default, e.g. \"/admin\")"
+  value       = { for lane, cfg in local.lanes : lane => cfg.path_prefix }
 }
 
 output "firehose_stream_names" {
@@ -94,11 +104,9 @@ output "sns_alarm_topic_arns" {
 # CloudFront Signed URL (consumed by ECS task def env vars)
 # --------------------------------------------------------------------------------
 
-output "cloudfront_signing_key_pair_ids" {
-  description = "Map of lane to CloudFront signing key pair ID (empty if signing disabled)"
-  value = {
-    for lane, c in module.cdn : lane => c.signing_key_pair_id
-  }
+output "cloudfront_signing_key_pair_id" {
+  description = "CloudFront signing key pair ID (single distribution; empty if signing disabled)"
+  value       = module.cdn.signing_key_pair_id
 }
 
 output "cloudfront_signing_key_secret_arn" {
