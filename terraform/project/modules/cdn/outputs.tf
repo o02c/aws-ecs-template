@@ -19,12 +19,12 @@ output "distribution_hosted_zone_id" {
 }
 
 output "signing_key_pair_id" {
-  description = "CloudFront signing key pair ID for signed URL generation"
+  description = "CloudFront signing key pair ID for signed URL generation (empty if signing disabled)"
   value       = try(aws_cloudfront_public_key.signing["default"].id, "")
 }
 
 output "signing_key_group_id" {
-  description = "CloudFront signing key group ID"
+  description = "CloudFront signing key group ID (empty if signing disabled)"
   value       = try(aws_cloudfront_key_group.signing["default"].id, "")
 }
 

@@ -87,7 +87,7 @@ project-destroy:
     terraform -chdir=terraform/project/environments/{{environment}} destroy -auto-approve
     -aws logs delete-log-group --log-group-name "/aws/vpc/flow-log/{{project_name}}-{{environment}}" 2>/dev/null || true
     -for svc in user-api admin-api; do aws logs delete-log-group --log-group-name "/ecs/{{project_name}}-{{environment}}/$svc" 2>/dev/null || true; done
-    -for lane in user admin; do aws logs delete-log-group --region us-east-1 --log-group-name "aws-waf-logs-{{project_name}}-{{environment}}-$lane" 2>/dev/null || true; done
+    -aws logs delete-log-group --region us-east-1 --log-group-name "aws-waf-logs-{{project_name}}-{{environment}}" 2>/dev/null || true
 
 # --------------------------------------------------------------------------------
 # Docker Build & Push
@@ -227,12 +227,12 @@ s3-empty:
 # Utility
 # --------------------------------------------------------------------------------
 
-# Simple HTTPS health check (both lanes)
+# Simple HTTPS health check (both lanes, single domain with path prefix)
 check:
     @echo "--- user ---"
     @curl -sf https://{{domain_name}}/api/health && echo ""
     @echo "--- admin ---"
-    @curl -sf https://admin.{{domain_name}}/api/health && echo ""
+    @curl -sf https://{{domain_name}}/admin/api/health && echo ""
 
 # Full verify: HTTPS, TLS, every log destination, bucket posture
 verify-deploy:

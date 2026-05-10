@@ -1,10 +1,10 @@
-const API_BASE = "/api";
+const API_BASE = "/admin/api";
 const statusEl = document.getElementById("status");
 const statsEl = document.getElementById("stats");
 
 async function checkHealth() {
   try {
-    const res = await fetch("/api/health");
+    const res = await fetch(`${API_BASE}/health`);
     const data = await res.json();
     statusEl.textContent = `API Status: ${data.status} (${data.service})`;
     statusEl.className = "ok";

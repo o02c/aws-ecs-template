@@ -109,7 +109,7 @@
         },
         {
           name: 'ALLOWED_HOSTS',
-          value: "localhost,127.0.0.1,{{ tfstate `output.lane_domains['user']` }}",
+          value: "localhost,127.0.0.1,{{ tfstate `output.domain_name` }}",
         },
         {
           name: 'S3_BUCKET_NAME',
@@ -117,11 +117,11 @@
         },
         {
           name: 'CLOUDFRONT_DOMAIN',
-          value: "{{ tfstate `output.lane_domains['user']` }}",
+          value: "{{ tfstate `output.domain_name` }}",
         },
         {
           name: 'CLOUDFRONT_KEY_PAIR_ID',
-          value: "{{ tfstate `output.cloudfront_signing_key_pair_ids['user']` }}",
+          value: "{{ tfstate `output.cloudfront_signing_key_pair_id` }}",
         },
         {
           name: 'CLOUDFRONT_SIGNING_KEY_SECRET_ARN',

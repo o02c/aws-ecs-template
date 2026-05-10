@@ -210,36 +210,41 @@ module "monitoring" {
 }
 
 # --------------------------------------------------------------------------------
-# CDN (per-lane)
+# CDN (single distribution, path-routed across lanes)
 # --------------------------------------------------------------------------------
 
 module "cdn" {
-  source   = "../../modules/cdn"
-  for_each = local.lanes
+  source = "../../modules/cdn"
 
-  project_name                   = var.project_name
-  environment                    = var.environment
-  lane                           = each.key
-  alb_dns_name                   = module.lb[each.key].alb_dns_name
-  alb_arn                        = module.lb[each.key].alb_arn
-  s3_bucket_regional_domain_name = module.storage[each.key].bucket_regional_domain_name
-  s3_bucket_id                   = module.storage[each.key].bucket_id
-  cloudfront_oac_id              = module.storage[each.key].cloudfront_oac_id
-  acm_certificate_arn            = module.cert.cloudfront_certificate_arn
-  hostname                       = each.value.subdomain == "" ? var.domain_name : "${each.value.subdomain}.${var.domain_name}"
-  route53_zone_id                = module.dns.zone_id
-  enable_signing                 = local.cloudfront_signing_enabled
-  signing_public_key_pem         = local.cloudfront_signing_public_key_pem
-  files_path_pattern             = local.signed_files_path_pattern
-  api_path_pattern               = local.api_path_pattern
-  waf_rate_limit                 = local.waf_rate_limit
-  geo_restriction_locations      = local.geo_restriction_locations
-  cache_ttl                      = local.cache_ttl
-  log_bucket_domain_name         = module.logging.bucket_domain_name
-  log_prefix                     = "cloudfront/${each.key}/"
-  waf_log_bucket_arn             = module.logging.waf_bucket_arn
-  vpc_id                         = module.network.vpc_id
-  alb_security_group_id          = module.network.security_group_ids["${each.key}-alb"]
+  project_name = var.project_name
+  environment  = var.environment
+
+  lanes = {
+    for lane, cfg in local.lanes : lane => {
+      path_prefix                    = cfg.path_prefix
+      alb_arn                        = module.lb[lane].alb_arn
+      alb_dns_name                   = module.lb[lane].alb_dns_name
+      alb_security_group_id          = module.network.security_group_ids["${lane}-alb"]
+      s3_bucket_regional_domain_name = module.storage[lane].bucket_regional_domain_name
+      s3_bucket_id                   = module.storage[lane].bucket_id
+      cloudfront_oac_id              = module.storage[lane].cloudfront_oac_id
+    }
+  }
+
+  acm_certificate_arn       = module.cert.cloudfront_certificate_arn
+  hostname                  = var.domain_name
+  route53_zone_id           = module.dns.zone_id
+  enable_signing            = local.cloudfront_signing_enabled
+  signing_public_key_pem    = local.cloudfront_signing_public_key_pem
+  files_path_pattern        = local.signed_files_path_pattern
+  waf_rate_limit            = local.waf_rate_limit
+  ip_allowlist              = local.ip_allowlist
+  geo_restriction_locations = local.geo_restriction_locations
+  cache_ttl                 = local.cache_ttl
+  log_bucket_domain_name    = module.logging.bucket_domain_name
+  log_prefix                = "cloudfront/"
+  waf_log_bucket_arn        = module.logging.waf_bucket_arn
+  vpc_id                    = module.network.vpc_id
 }
 
 # --------------------------------------------------------------------------------
