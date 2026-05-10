@@ -1,6 +1,6 @@
 ---
 name: deploy-lifecycle
-description: Terraform ベースの deploy / 疎通確認 / destroy の標準手順。手動で terraform apply や docker build を並べるのではなく、justfile と scripts/ に用意されたレシピ・シェルスクリプトを使う。CDK 版ワークフローは §8 を参照。Use when the user asks to deploy, set up, verify, tear down, destroy, or reset the infrastructure.
+description: Terraform ベースの deploy / 疎通確認 / destroy の標準手順。手動で terraform apply や docker build を並べるのではなく、justfile と scripts/ に用意されたレシピ・シェルスクリプトを使う。Use when the user asks to deploy, set up, verify, tear down, destroy, or reset the infrastructure.
 ---
 
 # Deploy / Verify / Destroy Lifecycle
@@ -10,7 +10,7 @@ description: Terraform ベースの deploy / 疎通確認 / destroy の標準手
 ## Scope
 
 - 扱う：Terraform 版のライフサイクル（`full-deploy.sh` / `full-destroy.sh` / justfile レシピ）、ECS サービス更新、疎通確認、orphan 掃除。
-- 扱わない：Terraform のコード規約（→ `terraform-conventions`）、IAM 設計（→ `iam-design`）、CDK 版のスタック設計（§8 の参考レシピのみ）。
+- 扱わない：Terraform のコード規約（→ `terraform-conventions`）、IAM 設計（→ `iam-design`）。
 
 ## 0. 事前 setup
 
@@ -173,4 +173,3 @@ just setup                    # 再度立ち上げ
 
 - スクリプト本体：`scripts/full-deploy.sh`、`scripts/full-destroy.sh`、`scripts/empty-versioned-bucket.py`
 - レシピ一覧：`justfile`（`just --list` で閲覧）
-- CDK 版を使う場合：`just cdk-deploy-all` / `just cdk-destroy-all`（本ドキュメントは Terraform 版の扱い）

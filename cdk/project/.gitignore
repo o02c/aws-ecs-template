@@ -1,9 +1,0 @@
-node_modules/
-cdk.out/
-*.js
-*.d.ts
-dist/
-
-# Keep cdk.context.json in Git
-!cdk.context.json
-!jest.config.js

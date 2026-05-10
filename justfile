@@ -38,60 +38,6 @@ destroy: _confirm-destroy
     bash scripts/full-destroy.sh
 
 # --------------------------------------------------------------------------------
-# CDK - Shared
-# --------------------------------------------------------------------------------
-
-# Synth CDK shared stacks
-cdk-shared-synth env="dev":
-    cd cdk/shared && npx cdk synth -c env={{env}}
-
-# Diff CDK shared stacks
-cdk-shared-diff env="dev":
-    cd cdk/shared && npx cdk diff -c env={{env}}
-
-# Deploy CDK shared stacks
-cdk-shared-deploy env="dev":
-    cd cdk/shared && npx cdk deploy -c env={{env}} --all --require-approval broadening
-
-# Destroy CDK shared stacks
-cdk-shared-destroy env="dev":
-    cd cdk/shared && npx cdk destroy -c env={{env}} --all --force
-
-# --------------------------------------------------------------------------------
-# CDK - Project
-# --------------------------------------------------------------------------------
-
-# Synth CDK project stacks
-cdk-project-synth env="dev":
-    cd cdk/project && npx cdk synth -c env={{env}}
-
-# Diff CDK project stacks
-cdk-project-diff env="dev":
-    cd cdk/project && npx cdk diff -c env={{env}}
-
-# Deploy CDK project stacks
-cdk-project-deploy env="dev":
-    cd cdk/project && npx cdk deploy -c env={{env}} --all --require-approval broadening
-
-# Destroy CDK project stacks
-cdk-project-destroy env="dev":
-    cd cdk/project && npx cdk destroy -c env={{env}} --all --force
-
-# --------------------------------------------------------------------------------
-# CDK - Full deploy/destroy cycle
-# --------------------------------------------------------------------------------
-
-# CDK - Full deploy cycle (shared -> project)
-cdk-deploy-all env="dev":
-    cd cdk/shared && npx cdk deploy -c env={{env}} --all --require-approval broadening
-    cd cdk/project && npx cdk deploy -c env={{env}} --all --require-approval broadening
-
-# CDK - Full destroy cycle (project -> shared, reverse order)
-cdk-destroy-all env="dev":
-    cd cdk/project && npx cdk destroy -c env={{env}} --all --force
-    cd cdk/shared && npx cdk destroy -c env={{env}} --all --force
-
-# --------------------------------------------------------------------------------
 # Terraform - Shared
 # --------------------------------------------------------------------------------
 
