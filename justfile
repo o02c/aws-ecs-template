@@ -216,7 +216,7 @@ s3-empty:
         "{{project_name}}-{{environment}}-user-assets" \
         "{{project_name}}-{{environment}}-admin-assets" \
         "{{project_name}}-{{environment}}-access-logs-${ACCOUNT_ID}" \
-        "{{project_name}}-{{environment}}-audit-logs-${ACCOUNT_ID}"; do
+        "aws-waf-logs-{{project_name}}-{{environment}}-${ACCOUNT_ID}"; do
         echo "--- Emptying $bucket ---"
         aws s3 rm "s3://$bucket" --recursive 2>/dev/null || true
         python3 scripts/empty-versioned-bucket.py "$bucket"

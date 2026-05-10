@@ -2,15 +2,20 @@
 
 ## Overview
 
-Multi-lane web application infrastructure on AWS using ECS Fargate.
+Multi-lane web application infrastructure on AWS using ECS Fargate. Lanes share a
+single CloudFront distribution and are split by path prefix (see
+[path-routing-app-guide.md](path-routing-app-guide.md) for the app-side contract).
 
 ```
 Internet
   │
   ▼
-CloudFront (per-lane)
-  ├── /assets/*  → S3 (OAC)
-  └── /*         → Internal ALB (VPC Origin)
+CloudFront (single distribution, path-routed)
+  ├── /api/*       → user  ALB (VPC Origin) → ECS user-api
+  ├── /admin/api/* → admin ALB (VPC Origin) → ECS admin-api
+  ├── /admin*      → admin S3 (OAC)
+  ├── /files/*     → user  S3 (OAC, signed URL)
+  └── default      → user  S3 (OAC)
                      │
                      ▼
                  ECS Fargate (shared cluster)
@@ -43,9 +48,14 @@ CloudFront (per-lane)
 - IAM database authentication enabled
 - Shared across all lanes
 
-### CDN (per-lane)
-- CloudFront distribution with VPC origin (ALB) and S3 origin (OAC)
-- Separate cache policies for API (no cache) and static assets
+### CDN (single distribution, path-routed)
+- 1 CloudFront distribution shared across lanes; path patterns select the origin
+- Origins per lane (ALB via VPC Origin, S3 via OAC)
+- CachingDisabled for ALB behaviors, custom static cache for S3 behaviors
+- CloudFront Function (viewer-request) on S3 behaviors: trailing-slash → `index.html`,
+  bare lane prefix → 301 to `<prefix>/`
+- Optional WAF IP allowlist with `scope = "admin" | "global"` (see
+  `terraform/project/modules/cdn/waf.tf`)
 
 ### Storage (per-lane)
 - S3 bucket with versioning and encryption
