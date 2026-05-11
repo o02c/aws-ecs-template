@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------------
-# Aurora PostgreSQL Cluster (Serverless v2)
+# Aurora PostgreSQL Cluster (provisioned)
 # --------------------------------------------------------------------------------
 
 resource "aws_rds_cluster" "this" {
@@ -23,11 +23,6 @@ resource "aws_rds_cluster" "this" {
   final_snapshot_identifier           = "${var.project_name}-${var.environment}-final"
   backup_retention_period             = var.db_config.backup_retention_period
 
-  serverlessv2_scaling_configuration {
-    min_capacity = var.db_config.serverless_min_capacity
-    max_capacity = var.db_config.serverless_max_capacity
-  }
-
   tags = {
     Name = "${var.project_name}-${var.environment}"
   }
@@ -42,7 +37,7 @@ resource "aws_rds_cluster_instance" "this" {
 
   identifier              = "${var.project_name}-${var.environment}-${each.key}"
   cluster_identifier      = aws_rds_cluster.this.id
-  instance_class          = "db.serverless"
+  instance_class          = var.db_config.instance_class
   engine                  = aws_rds_cluster.this.engine
   engine_version          = aws_rds_cluster.this.engine_version
   db_parameter_group_name = aws_db_parameter_group.this.name
