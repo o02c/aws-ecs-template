@@ -77,13 +77,14 @@ locals {
   }
 
   # Aurora PostgreSQL cluster config. Change these to tune per env.
+  # Provisioned instances (Django の永続コネクション + ECS Fargate の steady load
+  # に Serverless v2 が合わないため、t4g.medium ベースの provisioned に統一)。
   db_config = {
     engine_version          = "16.4"
     database_name           = "app"
     iam_username            = "app"
+    instance_class          = "db.t4g.medium"
     instances               = { writer = {}, reader = {} }
-    serverless_min_capacity = 0.5
-    serverless_max_capacity = 4
     backup_retention_period = 7
     deletion_protection     = false
     skip_final_snapshot     = true

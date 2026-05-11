@@ -52,16 +52,15 @@ variable "kms_key_arn" {
 variable "db_config" {
   description = <<-EOT
     Aurora cluster / instance settings. Environment-specific values
-    (instance type, Serverless v2 capacity, backup retention, etc.) live in
+    (instance class, instance count, backup retention, etc.) live in
     environments/<env>/locals.tf so the env file is the UI of the database.
   EOT
   type = object({
     engine_version          = string
     database_name           = string
     iam_username            = string
+    instance_class          = string
     instances               = map(object({}))
-    serverless_min_capacity = number
-    serverless_max_capacity = number
     backup_retention_period = number
     deletion_protection     = bool
     skip_final_snapshot     = bool
