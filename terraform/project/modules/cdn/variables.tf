@@ -82,18 +82,13 @@ variable "geo_restriction_locations" {
   type        = list(string)
 }
 
-variable "log_bucket_domain_name" {
-  description = "Domain name of the S3 bucket for access logging"
+variable "log_bucket_arn" {
+  description = "ARN of the access-log S3 bucket. CloudFront standard logging v2 delivers under `cloudfront/` of this bucket in Hive-partitioned layout (see cloudwatch_log_delivery.tf)."
   type        = string
 }
 
 variable "waf_log_bucket_arn" {
   description = "ARN of the dedicated aws-waf-logs-* bucket (direct WAF → S3 destination)"
-  type        = string
-}
-
-variable "log_prefix" {
-  description = "Prefix for CloudFront access log objects"
   type        = string
 }
 

@@ -216,6 +216,7 @@ s3-empty:
         "{{project_name}}-{{environment}}-user-assets" \
         "{{project_name}}-{{environment}}-admin-assets" \
         "{{project_name}}-{{environment}}-access-logs-${ACCOUNT_ID}" \
+        "{{project_name}}-{{environment}}-athena-results-${ACCOUNT_ID}" \
         "aws-waf-logs-{{project_name}}-{{environment}}-${ACCOUNT_ID}"; do
         echo "--- Emptying $bucket ---"
         aws s3 rm "s3://$bucket" --recursive 2>/dev/null || true
@@ -226,6 +227,27 @@ s3-empty:
 # --------------------------------------------------------------------------------
 # Utility
 # --------------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------------
+# Athena (access-log analysis)
+# --------------------------------------------------------------------------------
+
+# Create the CloudFront partitioned table (idempotent).
+athena-create-cf-table:
+    bash scripts/athena-query.sh athena/cloudfront/01_create_table.sql
+
+# Run a saved query file. Pass DIST=EXXXXXXXX (or pull it from terraform output).
+# Example: just athena-cf athena/cloudfront/02_sample_queries.sql DIST=E1ABC...
+athena-cf sql dist="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -z "{{dist}}" ]]; then
+        dist=$(terraform -chdir=terraform/project/environments/{{environment}} \
+            output -raw cloudfront_distribution_id)
+    else
+        dist="{{dist}}"
+    fi
+    bash scripts/athena-query.sh -e "distributionid=${dist}" "{{sql}}"
 
 # Simple HTTPS health check (both lanes, single domain with path prefix)
 check:

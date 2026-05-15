@@ -113,3 +113,27 @@ output "cloudfront_signing_key_secret_arn" {
   description = "ARN of the Secrets Manager secret holding the signing private key (empty if disabled)"
   value       = local.cloudfront_signing_key_secret_arn
 }
+
+# --------------------------------------------------------------------------------
+# Athena / log analysis (consumed by scripts/athena-query.sh)
+# --------------------------------------------------------------------------------
+
+output "access_log_bucket_id" {
+  description = "Shared access-log bucket (CloudFront/ALB/S3/Firehose logs land here under prefixes — see docs/logs.md)"
+  value       = module.logging.bucket_id
+}
+
+output "athena_workgroup_name" {
+  description = "Athena workgroup that pins query result storage and metrics"
+  value       = module.logging.athena_workgroup_name
+}
+
+output "athena_database_name" {
+  description = "Glue catalog database for access-log Athena tables"
+  value       = module.logging.athena_database_name
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID (also surfaces as the `distributionid` partition value in cloudfront_logs)"
+  value       = module.cdn.distribution_id
+}
