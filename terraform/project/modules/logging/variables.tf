@@ -25,3 +25,9 @@ variable "access_log_lifecycle" {
     expiration_days = number
   })
 }
+
+variable "athena_results_expiration_days" {
+  description = "Days after which Athena query result objects are expired (results are reproducible from source logs)"
+  type        = number
+  default     = 30
+}

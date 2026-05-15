@@ -16,6 +16,9 @@ resource "aws_s3_bucket_policy" "access_logs" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # CloudFront standard logging v2 → S3 (vended logs).
+      # SourceAccount/SourceArn pin the delivery-source ARN to this account in
+      # us-east-1, matching the AWS-recommended vended-logs S3 policy template.
       {
         Sid    = "AllowCloudFrontLogDelivery"
         Effect = "Allow"
@@ -26,7 +29,11 @@ resource "aws_s3_bucket_policy" "access_logs" {
         Resource = "${aws_s3_bucket.access_logs.arn}/cloudfront/*"
         Condition = {
           StringEquals = {
-            "s3:x-amz-acl" = "bucket-owner-full-control"
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+            "aws:SourceAccount" = [var.aws_account_id]
+          }
+          ArnLike = {
+            "aws:SourceArn" = ["arn:aws:logs:us-east-1:${var.aws_account_id}:delivery-source:*"]
           }
         }
       },
@@ -38,6 +45,14 @@ resource "aws_s3_bucket_policy" "access_logs" {
         }
         Action   = "s3:GetBucketAcl"
         Resource = aws_s3_bucket.access_logs.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = [var.aws_account_id]
+          }
+          ArnLike = {
+            "aws:SourceArn" = ["arn:aws:logs:us-east-1:${var.aws_account_id}:delivery-source:*"]
+          }
+        }
       },
       {
         Sid    = "AllowALBLogDelivery"

@@ -241,8 +241,7 @@ module "cdn" {
   ip_allowlist              = local.ip_allowlist
   geo_restriction_locations = local.geo_restriction_locations
   cache_ttl                 = local.cache_ttl
-  log_bucket_domain_name    = module.logging.bucket_domain_name
-  log_prefix                = "cloudfront/"
+  log_bucket_arn            = module.logging.bucket_arn
   waf_log_bucket_arn        = module.logging.waf_bucket_arn
   vpc_id                    = module.network.vpc_id
 }

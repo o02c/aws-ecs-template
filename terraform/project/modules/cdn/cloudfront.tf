@@ -191,11 +191,9 @@ resource "aws_cloudfront_distribution" "this" {
 
   aliases = [var.hostname]
 
-  logging_config {
-    bucket          = var.log_bucket_domain_name
-    prefix          = var.log_prefix
-    include_cookies = false
-  }
+  # Access logging is configured out-of-band via CloudWatch Logs standard logging v2.
+  # See cloudwatch_log_delivery.tf — that path writes Hive-partitioned objects so Athena can
+  # actually prune partitions, which the legacy `logging_config` flat layout could not.
 
   viewer_certificate {
     acm_certificate_arn      = var.acm_certificate_arn

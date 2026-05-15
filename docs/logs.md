@@ -17,7 +17,7 @@ container 出力 (gunicorn / Django / nginx stdout) は CloudWatch Logs を経�
 | Prefix | 中身 | 出力元 |
 |---|---|---|
 | `alb/{lane}/` | ALB アクセスログ (lane ごと) | ALB → S3 直接 (`terraform/project/modules/lb/alb.tf`) |
-| `cloudfront/` | CloudFront 標準ログ (単一 distribution) | CloudFront → S3 直接 (`terraform/project/modules/cdn/cloudfront.tf`) |
+| `cloudfront/distributionid={id}/year=YYYY/month=MM/day=DD/hour=HH/` | CloudFront 標準ログ v2 (Hive 互換) | CloudWatch Logs vended delivery (`terraform/project/modules/cdn/cloudwatch_log_delivery.tf`) |
 | `s3/{lane}/` | アセットバケットの S3 access log | S3 logging (`terraform/project/modules/storage/s3.tf`) |
 | `audit/year=YYYY/month=MM/day=DD/` | 監査イベント (`type=audit`) | Firehose `{project}-{env}-audit` (`terraform/project/modules/app/firehose.tf`) |
 | `audit-errors/year=YYYY/.../{error-type}/` | 監査 Firehose の配信失敗 | 同上 (Firehose error_output) |
@@ -66,6 +66,26 @@ container 出力の集約には使わない。AWS マネージド機能 (VPC flo
 |---|---|---|
 | `{project}-{env}-audit` | FireLens が `type=audit` のレコードを振り分け | access-log bucket `audit/year=YYYY/...` |
 | `{project}-{env}-ecs-logs` | FireLens がそれ以外を全部振り分け | access-log bucket `ecs-logs/year=YYYY/...` |
+
+## Athena (CloudFront 用パーティション付きテーブル)
+
+`terraform/project/modules/logging/athena.tf` でワークグループ (`{project}-{env}-logs`) と Glue database (`{project}_{env}_logs`) を、クエリ結果用バケット (`{project}-{env}-athena-results-{account}`) を `s3_athena_results.tf` で作成している。
+
+CloudFront ログは v2 配信 (`cdn/cloudwatch_log_delivery.tf`) で Hive 互換パスに落ちるので、`athena/cloudfront/01_create_table.sql` の DDL（partition projection 利用）でテーブルを作るだけで `MSCK REPAIR` 不要で即クエリできる。Partition は `distributionid / year / month / day / hour`。`distributionid` は `injected` 型なので、SELECT 時に必ず WHERE 句で固定する。
+
+```bash
+# 一度だけ: パーティション付きテーブルを作成
+just athena-create-cf-table
+
+# 任意の SQL を流す (distributionid は terraform output から自動注入)
+just athena-cf athena/cloudfront/02_sample_queries.sql
+```
+
+レンダリングだけ確認したい場合:
+
+```bash
+scripts/athena-query.sh --print athena/cloudfront/01_create_table.sql
+```
 
 ## アプリ側の責任
 
