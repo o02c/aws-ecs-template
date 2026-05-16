@@ -82,6 +82,17 @@ else
 fi
 
 # --------------------------------------------------------------------------------
+# 4.5. Upload app-resources (startup config + report templates)
+# --------------------------------------------------------------------------------
+# Tasks read these at boot; sync before ECS deploy so the new revision sees the
+# latest templates from its very first task launch.
+echo ""
+echo "--- [4.5/6] Upload app-resources ---"
+APP_RESOURCES_BUCKET="${PROJECT_NAME}-${ENVIRONMENT}-app-resources"
+aws s3 sync app-resources/ "s3://${APP_RESOURCES_BUCKET}/" \
+  --delete --exclude ".*" --exclude "README.md"
+
+# --------------------------------------------------------------------------------
 # 5. ECS Deploy
 # --------------------------------------------------------------------------------
 echo ""

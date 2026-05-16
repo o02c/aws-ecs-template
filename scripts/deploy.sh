@@ -43,6 +43,19 @@ deploy_backend() {
 }
 
 # --------------------------------------------------------------------------------
+# Upload App Resources (startup config + report templates)
+# --------------------------------------------------------------------------------
+# Repo-managed templates land in s3://${PROJECT_NAME}-${ENVIRONMENT}-app-resources.
+# Lane access is enforced by per-task-role IAM (see app/iam.tf), so we can
+# sync everything in one call — IAM does the partitioning at read time.
+deploy_app_resources() {
+  local bucket="$PROJECT_NAME-$ENVIRONMENT-app-resources"
+  echo "--- Upload app-resources (s3://${bucket}) ---"
+  aws s3 sync "$PROJECT_ROOT/app-resources/" "s3://$bucket/" \
+    --delete --exclude ".*" --exclude "README.md"
+}
+
+# --------------------------------------------------------------------------------
 # Upload Frontend
 # --------------------------------------------------------------------------------
 # Path-routing: each lane's frontend is uploaded under its CloudFront path_prefix
@@ -75,6 +88,9 @@ case "$TARGET" in
       deploy_frontend "$lane"
     done
     ;;
+  app-resources)
+    deploy_app_resources
+    ;;
   all)
     ecr_login
     for service in "${SERVICES[@]}"; do
@@ -83,13 +99,14 @@ case "$TARGET" in
     for lane in "${LANES[@]}"; do
       deploy_frontend "$lane"
     done
+    deploy_app_resources
     echo ""
     echo "=== Deploy Complete ==="
     echo "User:  https://o2c.click/api/health"
     echo "Admin: https://o2c.click/admin/api/health"
     ;;
   *)
-    echo "Usage: $0 [user-api|admin-api|frontend|all]"
+    echo "Usage: $0 [user-api|admin-api|frontend|app-resources|all]"
     exit 1
     ;;
 esac
