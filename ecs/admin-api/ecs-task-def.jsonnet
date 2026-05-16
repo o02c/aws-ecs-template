@@ -111,6 +111,14 @@
           value: "{{ tfstate `module.storage['admin'].aws_s3_bucket.this.id` }}",
         },
         {
+          name: 'APP_RESOURCES_BUCKET',
+          value: "{{ tfstate `module.app.aws_s3_bucket.app_resources.id` }}",
+        },
+        {
+          name: 'LANE',
+          value: 'admin',
+        },
+        {
           name: 'CLOUDFRONT_DOMAIN',
           value: "{{ tfstate `output.domain_name` }}",
         },

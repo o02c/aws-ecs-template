@@ -17,6 +17,9 @@ CLOUDFRONT_DOMAIN = os.environ.get("CLOUDFRONT_DOMAIN", "")
 S3_FILES_PREFIX = os.environ.get("S3_FILES_PREFIX", "files")
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 
+APP_RESOURCES_BUCKET = os.environ.get("APP_RESOURCES_BUCKET", "")
+LANE = os.environ.get("LANE", "")
+
 SES_FROM_ADDRESS = os.environ.get("SES_FROM_ADDRESS", "")
 SES_ALLOWED_RECIPIENTS = {
     r.strip() for r in os.environ.get("SES_ALLOWED_RECIPIENTS", "").split(",") if r.strip()
@@ -32,6 +35,30 @@ EXT_PATTERN = re.compile(r"^\.[a-zA-Z0-9]{1,10}$")
 
 s3 = boto3.client("s3")
 ses = boto3.client("sesv2", endpoint_url=SES_ENDPOINT_URL)
+
+
+def _read_app_resource(key: str) -> dict:
+    try:
+        obj = s3.get_object(Bucket=APP_RESOURCES_BUCKET, Key=key)
+        return {"ok": True, "content": obj["Body"].read().decode("utf-8").strip()}
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__, "detail": str(exc)}
+
+
+# Eagerly read the lane-scoped templates at module import (= gunicorn worker
+# boot) to verify IAM wiring without waiting for the first request. Failures
+# are logged but do not crash the worker — the task should still start so the
+# operator can investigate via /admin/api/test/app-resources.
+APP_RESOURCES_STARTUP_READ = {}
+if APP_RESOURCES_BUCKET:
+    APP_RESOURCES_STARTUP_READ = {
+        "common/hello.txt": _read_app_resource("common/hello.txt"),
+        f"{LANE}/hello.txt": _read_app_resource(f"{LANE}/hello.txt") if LANE else {"ok": False, "error": "LANE env unset"},
+    }
+    logger.info(
+        "app-resources startup read: %s",
+        json.dumps({"bucket": APP_RESOURCES_BUCKET, "lane": LANE, "result": APP_RESOURCES_STARTUP_READ}),
+    )
 
 
 @require_GET
@@ -92,6 +119,26 @@ def get_file_url(request, file_id):
 # --------------------------------------------------------------------------------
 # Test endpoints for verifying structured logging
 # --------------------------------------------------------------------------------
+
+
+@require_GET
+def test_app_resources(request):
+    """Verify IAM lane scoping on the shared app-resources bucket.
+
+    No `key` query: returns the cached startup-time read result.
+    With `key`: attempts a live GetObject so cross-lane denial can be confirmed
+    (e.g. admin-api reading `user/hello.txt` should fail with AccessDenied).
+    """
+    key = request.GET.get("key", "")
+    if not key:
+        return JsonResponse({
+            "bucket": APP_RESOURCES_BUCKET,
+            "lane": LANE,
+            "startup_read": APP_RESOURCES_STARTUP_READ,
+        })
+    result = _read_app_resource(key)
+    status = 200 if result["ok"] else 403
+    return JsonResponse({"key": key, **result}, status=status)
 
 
 @require_GET
