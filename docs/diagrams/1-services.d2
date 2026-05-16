@@ -1,0 +1,63 @@
+direction: down
+
+title: |md
+  # Service Topology (path-routed single CloudFront)
+| {near: top-center; shape: text}
+
+internet: Internet Users {shape: cloud}
+
+route53: Route 53\n(Hosted Zone) {shape: hexagon}
+
+waf: WAFv2 WebACL\n(Common / SQLi / BadInputs / RateLimit) {shape: hexagon}
+
+cloudfront: CloudFront Distribution (single, path-routed) {
+  shape: rectangle
+  style.fill: "#f4f8ff"
+
+  b_api_user: /api/* {shape: rectangle}
+  b_api_admin: /admin/api/* {shape: rectangle}
+  b_static_admin: /admin* {shape: rectangle}
+  b_signed: /files/*\n(signed URL) {shape: rectangle}
+  b_default: default (/*) {shape: rectangle}
+}
+
+vpc: Project VPC (10.1.0.0/16) {
+  style.stroke-dash: 3
+
+  alb_user: Internal ALB (user)\nHTTPS:443 {shape: rectangle; style.fill: "#fff7e6"}
+  alb_admin: Internal ALB (admin)\nHTTPS:443 {shape: rectangle; style.fill: "#fff7e6"}
+
+  ecs_cluster: ECS Cluster\n(Fargate + Fargate Spot) {
+    style.fill: "#eef9ee"
+    svc_user: user-api\n(app + nginx + fluent-bit) {shape: rectangle}
+    svc_admin: admin-api\n(app + nginx + fluent-bit) {shape: rectangle}
+  }
+
+  aurora: Aurora PostgreSQL\n(db.t4g.medium writer/reader)\nIAM Auth / SSL {shape: cylinder; style.fill: "#f0e6ff"}
+}
+
+s3_user: S3 (user assets)\nOAC + KMS {shape: cylinder; style.fill: "#e8f4ff"}
+s3_admin: S3 (admin assets)\nOAC + KMS {shape: cylinder; style.fill: "#e8f4ff"}
+s3_app_resources: S3 (app resources)\ncommon/ + user/ + admin/\nlane-scoped IAM read\nKMS {shape: cylinder; style.fill: "#fdf2e9"}
+
+internet -> route53: HTTPS
+route53 -> cloudfront: Alias
+waf -> cloudfront: protect
+
+cloudfront.b_api_user -> vpc.alb_user: VPC Origin (HTTPS)
+cloudfront.b_api_admin -> vpc.alb_admin: VPC Origin (HTTPS)
+cloudfront.b_static_admin -> s3_admin: OAC (SigV4)
+cloudfront.b_signed -> s3_user: OAC (SigV4)
+cloudfront.b_default -> s3_user: OAC (SigV4)
+
+vpc.alb_user -> vpc.ecs_cluster.svc_user: HTTP:80\n(target group)
+vpc.alb_admin -> vpc.ecs_cluster.svc_admin: HTTP:80\n(target group)
+
+vpc.ecs_cluster.svc_user -> vpc.aurora: 5432
+vpc.ecs_cluster.svc_admin -> vpc.aurora: 5432
+
+vpc.ecs_cluster.svc_user -> s3_user: presigned PUT/GET
+vpc.ecs_cluster.svc_admin -> s3_admin: presigned PUT/GET
+
+vpc.ecs_cluster.svc_user -> s3_app_resources: GET common/* + user/*
+vpc.ecs_cluster.svc_admin -> s3_app_resources: GET common/* + admin/*

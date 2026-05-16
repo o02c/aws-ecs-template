@@ -118,6 +118,63 @@ resource "aws_iam_role_policy_attachment" "task_s3_access" {
 }
 
 # --------------------------------------------------------------------------------
+# App Resources Bucket: per-service inline policy (lane-scoped read access)
+# --------------------------------------------------------------------------------
+# Each task role gets an inline policy limiting object reads to common/* (shared)
+# and <lane>/* (lane-private). ListBucket is gated by s3:prefix so one lane
+# cannot enumerate another lane's keys.
+
+resource "aws_iam_role_policy" "task_app_resources" {
+  for_each = var.services
+
+  name = "app-resources-access"
+  role = aws_iam_role.task[each.key].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ReadLaneScopedObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+        ]
+        Resource = [
+          "${aws_s3_bucket.app_resources.arn}/common/*",
+          "${aws_s3_bucket.app_resources.arn}/${each.value.lane}/*",
+        ]
+      },
+      {
+        Sid      = "ListLaneScopedPrefixes"
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = aws_s3_bucket.app_resources.arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = [
+              "",
+              "common",
+              "common/*",
+              each.value.lane,
+              "${each.value.lane}/*",
+            ]
+          }
+        }
+      },
+      {
+        # SSE-KMS objects require kms:Decrypt to unwrap the data key on read.
+        # Scoped to the project s3 key, not wildcard.
+        Sid      = "DecryptObjectEnvelope"
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = var.s3_kms_key_arn
+      },
+    ]
+  })
+}
+
+# --------------------------------------------------------------------------------
 # FireLens Permissions (Firehose only; ECS task stdout/stderr はすべて Firehose 経由)
 # --------------------------------------------------------------------------------
 

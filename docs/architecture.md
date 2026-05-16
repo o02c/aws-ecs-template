@@ -62,6 +62,16 @@ CloudFront (single distribution, path-routed)
 - CloudFront OAC for secure access
 - IAM policy for ECS task access (including presigned URLs)
 
+### App Resources (shared bucket, lane-scoped via IAM)
+- Single S3 bucket `${project}-${env}-app-resources` for startup config and
+  report templates read by ECS tasks
+- Internal use only (no CloudFront origin)
+- Layout: `common/...` (shared across lanes), `<lane>/...` (lane-private)
+- Lane isolation enforced by inline IAM policies on each task role:
+  `GetObject` / `ListBucket` scoped to `common/*` + `<lane>/*`
+- SSE-KMS (project `s3` key), versioning Enabled, noncurrent versions expire
+  after 90 days, BucketOwnerEnforced (ACLs disabled)
+
 ### CI/CD
 - Artifact S3 bucket with EventBridge notifications
 - CodePipeline per service: Source (S3) → Build (CodeBuild) → Deploy (ecspresso)
