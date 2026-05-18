@@ -105,9 +105,25 @@ variable "firehose_buffering_interval_seconds" {
   type        = number
 }
 
-variable "fluent_bit_log_retention_days" {
-  description = "CloudWatch Logs retention (days) for the FireLens (Fluent Bit) router's own diagnostic log group. Application logs go to S3 via Firehose; this group only captures the router's startup/errors."
-  type        = number
+variable "fluent_bit_log_retention" {
+  description = <<-EOT
+    FireLens (Fluent Bit) router 自身の診断ログ設定。
+    destinations.cloudwatch = false にすると Log Group を作らない (ECS task の log driver
+    も変更必要なので通常は true 固定)。
+    log_class = "INFREQUENT_ACCESS" でコスト削減 (metric filter / subscription / data
+    protection が制限される点に注意)。
+  EOT
+  type = object({
+    destinations = object({
+      cloudwatch = bool
+      s3         = bool
+    })
+    cloudwatch = optional(object({
+      retention_days = number
+      log_class      = string
+    }))
+    s3 = optional(any)
+  })
 }
 
 variable "aws_account_id" {

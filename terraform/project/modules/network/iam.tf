@@ -1,8 +1,12 @@
 # --------------------------------------------------------------------------------
-# IAM Role for VPC Flow Logs
+# IAM Role for VPC Flow Logs (CloudWatch Logs destination only)
 # --------------------------------------------------------------------------------
+# S3 直送モードでは IAM role 不要 (AWS managed の delivery.logs サービスプリンシパル
+# をバケットポリシーで許可)。CW Logs 出力時のみ role/policy を作成する。
 
 data "aws_iam_policy_document" "flow_log_assume" {
+  count = local.vpc_flow_to_cw ? 1 : 0
+
   statement {
     effect = "Allow"
 
@@ -16,8 +20,10 @@ data "aws_iam_policy_document" "flow_log_assume" {
 }
 
 resource "aws_iam_role" "flow_log" {
+  count = local.vpc_flow_to_cw ? 1 : 0
+
   name               = "${var.project_name}-${var.environment}-flow-log"
-  assume_role_policy = data.aws_iam_policy_document.flow_log_assume.json
+  assume_role_policy = data.aws_iam_policy_document.flow_log_assume[0].json
 
   tags = {
     Name = "${var.project_name}-${var.environment}-flow-log"
@@ -25,6 +31,8 @@ resource "aws_iam_role" "flow_log" {
 }
 
 data "aws_iam_policy_document" "flow_log" {
+  count = local.vpc_flow_to_cw ? 1 : 0
+
   statement {
     effect = "Allow"
 
@@ -37,14 +45,16 @@ data "aws_iam_policy_document" "flow_log" {
     ]
 
     resources = [
-      aws_cloudwatch_log_group.flow_log.arn,
-      "${aws_cloudwatch_log_group.flow_log.arn}:*"
+      aws_cloudwatch_log_group.flow_log[0].arn,
+      "${aws_cloudwatch_log_group.flow_log[0].arn}:*"
     ]
   }
 }
 
 resource "aws_iam_role_policy" "flow_log" {
+  count = local.vpc_flow_to_cw ? 1 : 0
+
   name   = "flow-log"
-  role   = aws_iam_role.flow_log.id
-  policy = data.aws_iam_policy_document.flow_log.json
+  role   = aws_iam_role.flow_log[0].id
+  policy = data.aws_iam_policy_document.flow_log[0].json
 }

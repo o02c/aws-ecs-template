@@ -7,7 +7,8 @@
 # Firehose resources in us-east-1.
 
 resource "aws_s3_bucket" "waf_logs" {
-  bucket = "aws-waf-logs-${var.project_name}-${var.environment}-${var.aws_account_id}"
+  bucket              = "aws-waf-logs-${var.project_name}-${var.environment}-${var.aws_account_id}"
+  object_lock_enabled = var.log_buckets.waf_logs.object_lock.enabled
 
   tags = {
     Name = "aws-waf-logs-${var.project_name}-${var.environment}"
@@ -49,20 +50,18 @@ resource "aws_s3_bucket_public_access_block" "waf_logs" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "waf_logs" {
+resource "aws_s3_bucket_object_lock_configuration" "waf_logs" {
+  count = (
+    var.log_buckets.waf_logs.object_lock.enabled &&
+    var.log_buckets.waf_logs.object_lock.default_retention != null
+  ) ? 1 : 0
+
   bucket = aws_s3_bucket.waf_logs.id
 
   rule {
-    id     = "archive-and-expire"
-    status = "Enabled"
-
-    transition {
-      days          = var.access_log_lifecycle.transition_days
-      storage_class = "GLACIER"
-    }
-
-    expiration {
-      days = var.access_log_lifecycle.expiration_days
+    default_retention {
+      mode = var.log_buckets.waf_logs.object_lock.default_retention.mode
+      days = var.log_buckets.waf_logs.object_lock.default_retention.days
     }
   }
 }
