@@ -43,7 +43,41 @@ variable "kms_key_arn" {
   type        = string
 }
 
-variable "flow_log_retention_days" {
-  description = "Retention period (days) for VPC flow log CloudWatch group"
-  type        = number
+variable "vpc_flow_log_retention" {
+  description = <<-EOT
+    VPC Flow Logs の出力先・保持設定。
+    destinations.s3 = true → S3 直接配信 (parquet + Hive partitions)
+    destinations.cloudwatch = true → CloudWatch Logs (log_class で IA も可)
+    両方 true で二重出力。少なくとも一方を true にする必要あり (セキュリティガイド
+    §2.2.19「VPCフローログを無効にすることの禁止」)。
+  EOT
+  type = object({
+    destinations = object({
+      cloudwatch = bool
+      s3         = bool
+    })
+    cloudwatch = optional(object({
+      retention_days = number
+      log_class      = string
+    }))
+    s3 = optional(object({
+      bucket = string
+      prefix = string
+      transitions = list(object({
+        days          = number
+        storage_class = string
+      }))
+      expiration_days = optional(number)
+    }))
+  })
+
+  validation {
+    condition     = var.vpc_flow_log_retention.destinations.cloudwatch || var.vpc_flow_log_retention.destinations.s3
+    error_message = "VPC Flow Logs は最低 1 つの destination (cloudwatch / s3) を有効化する必要があります (セキュリティガイド §2.2.19)。"
+  }
+}
+
+variable "access_logs_bucket_arn" {
+  description = "Shared access-log S3 bucket ARN (used as VPC Flow Logs destination when destinations.s3 = true)"
+  type        = string
 }

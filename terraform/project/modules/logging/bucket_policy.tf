@@ -91,6 +91,38 @@ resource "aws_s3_bucket_policy" "access_logs" {
         Action   = "s3:GetBucketAcl"
         Resource = aws_s3_bucket.access_logs.arn
       },
+      # VPC Flow Logs S3 direct delivery (parquet + hive). AWS uses the same
+      # delivery.logs.amazonaws.com vended-logs principal as CloudFront /
+      # CloudWatch Logs delivery, scoped to vpc-flow/ prefix.
+      {
+        Sid    = "AllowVPCFlowLogsDelivery"
+        Effect = "Allow"
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.access_logs.arn}/vpc-flow/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+            "aws:SourceAccount" = [var.aws_account_id]
+          }
+        }
+      },
+      {
+        Sid    = "AllowVPCFlowLogsAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.access_logs.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = [var.aws_account_id]
+          }
+        }
+      },
       {
         Sid       = "DenyInsecureTransport"
         Effect    = "Deny"

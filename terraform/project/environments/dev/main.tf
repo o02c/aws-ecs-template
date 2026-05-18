@@ -38,11 +38,12 @@ module "kms" {
 module "logging" {
   source = "../../modules/logging"
 
-  project_name         = var.project_name
-  environment          = var.environment
-  region               = local.aws_region
-  aws_account_id       = data.aws_caller_identity.current.account_id
-  access_log_lifecycle = local.access_log_lifecycle
+  project_name   = var.project_name
+  environment    = var.environment
+  region         = local.aws_region
+  aws_account_id = data.aws_caller_identity.current.account_id
+  log_retention  = local.log_retention
+  log_buckets    = local.log_buckets
 }
 
 # --------------------------------------------------------------------------------
@@ -61,7 +62,8 @@ module "network" {
   shared_endpoint_phz_zone_ids = data.terraform_remote_state.shared.outputs.endpoint_phz_zone_ids
   transit_gateway_id           = local.transit_gateway_id
   kms_key_arn                  = module.kms.key_arns["logs"]
-  flow_log_retention_days      = local.flow_log_retention_days
+  access_logs_bucket_arn       = module.logging.bucket_arn
+  vpc_flow_log_retention       = local.log_retention.vpc_flow
 }
 
 # --------------------------------------------------------------------------------
@@ -163,7 +165,7 @@ module "app" {
   log_bucket_id                       = module.logging.bucket_id
   container_port                      = local.container_port
   firehose_buffering_interval_seconds = local.firehose_buffering_interval_seconds
-  fluent_bit_log_retention_days       = local.fluent_bit_log_retention_days
+  fluent_bit_log_retention            = local.log_retention.fluent_bit
   email_enabled                       = local.email.enabled
   email_policy_arn                    = local.email.enabled ? one([for _, m in module.email : m.policy_arn]) : ""
 }

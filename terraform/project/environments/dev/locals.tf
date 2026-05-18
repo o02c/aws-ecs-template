@@ -3,16 +3,6 @@ locals {
   vpc_cidr    = var.vpc_cidr
   name_prefix = "${var.project_name}-${var.environment}"
 
-  # VPC flow log CloudWatch retention (days)
-  flow_log_retention_days = 30
-
-  # Access-log bucket lifecycle (covers ALB/CloudFront/S3/audit/ecs-logs/waf prefixes).
-  # dev は短期保持、prod は規制要件に合わせて長期化。
-  access_log_lifecycle = {
-    transition_days = 90
-    expiration_days = 365
-  }
-
   # CloudFront static-assets cache TTL
   cache_ttl = {
     default_seconds = 86400    # 1 day
@@ -22,9 +12,146 @@ locals {
   # Firehose audit-log delivery buffering
   firehose_buffering_interval_seconds = 60
 
-  # FireLens (Fluent Bit) router's own diagnostic log group retention.
-  # App logs go to S3 via Firehose; this is just startup/error output.
-  fluent_bit_log_retention_days = 7
+  # --------------------------------------------------------------------------------
+  # Log retention / lifecycle (single source of truth)
+  # --------------------------------------------------------------------------------
+  # 全ログ種別の出力先・retention・storage class transition・expiration を一元管理。
+  # destinations.cloudwatch / destinations.s3 で個別に経路を on/off 可能。
+  # 長期 (10y+) 保持を見据え、Standard-IA(30d) → Glacier IR(90d) → Glacier(180d) →
+  # Deep Archive(365d) の 4 段階遷移を基本形とする。expiration_days = null は
+  # 「削除しない」を意味する。
+  #
+  # 注意:
+  #   * STANDARD_IA は最低 30 日、GLACIER_* 系は最低 90 日同一クラス保持の制約あり
+  #   * GLACIER_IR / GLACIER / DEEP_ARCHIVE オブジェクトは Athena 直クエリ不可
+  #     (restore 必要)。Athena 検索要件のあるログは IA 期間を伸ばすこと
+  #   * Object Lock の on/off は log_buckets で別管理
+
+  long_term_storage_class = "DEEP_ARCHIVE" # GLACIER に切替可。長期段の storage_class を統一管理
+
+  log_retention = {
+    audit = {
+      destinations = { cloudwatch = false, s3 = true }
+      s3 = {
+        bucket = "access_logs"
+        prefix = "audit/"
+        transitions = [
+          { days = 30, storage_class = "STANDARD_IA" },
+          { days = 90, storage_class = "GLACIER_IR" },
+          { days = 180, storage_class = "GLACIER" },
+          { days = 365, storage_class = local.long_term_storage_class },
+        ]
+        expiration_days = null
+      }
+    }
+    ecs_logs = {
+      destinations = { cloudwatch = false, s3 = true }
+      s3 = {
+        bucket = "access_logs"
+        prefix = "ecs-logs/"
+        transitions = [
+          { days = 90, storage_class = "GLACIER_IR" },
+          { days = 365, storage_class = local.long_term_storage_class },
+        ]
+        expiration_days = 1825 # 5y
+      }
+    }
+    vpc_flow = {
+      destinations = { cloudwatch = false, s3 = true }
+      s3 = {
+        bucket = "access_logs"
+        prefix = "vpc-flow/"
+        transitions = [
+          { days = 30, storage_class = "STANDARD_IA" },
+          { days = 90, storage_class = "GLACIER_IR" },
+          { days = 365, storage_class = local.long_term_storage_class },
+        ]
+        expiration_days = 1095 # 3y
+      }
+    }
+    alb_access = {
+      destinations = { cloudwatch = false, s3 = true }
+      s3 = {
+        bucket = "access_logs"
+        prefix = "alb/"
+        transitions = [
+          { days = 30, storage_class = "STANDARD_IA" },
+          { days = 90, storage_class = "GLACIER_IR" },
+          { days = 365, storage_class = local.long_term_storage_class },
+        ]
+        expiration_days = 1095
+      }
+    }
+    cloudfront_access = {
+      destinations = { cloudwatch = false, s3 = true }
+      s3 = {
+        bucket = "access_logs"
+        prefix = "cloudfront/"
+        transitions = [
+          { days = 30, storage_class = "STANDARD_IA" },
+          { days = 90, storage_class = "GLACIER_IR" },
+          { days = 365, storage_class = local.long_term_storage_class },
+        ]
+        expiration_days = 1095
+      }
+    }
+    s3_access = {
+      destinations = { cloudwatch = false, s3 = true }
+      s3 = {
+        bucket = "access_logs"
+        prefix = "s3/"
+        transitions = [
+          { days = 30, storage_class = "STANDARD_IA" },
+          { days = 90, storage_class = "GLACIER_IR" },
+          { days = 365, storage_class = local.long_term_storage_class },
+        ]
+        expiration_days = 1095
+      }
+    }
+    waf = {
+      destinations = { cloudwatch = false, s3 = true }
+      s3 = {
+        bucket = "waf_logs"
+        prefix = ""
+        transitions = [
+          { days = 30, storage_class = "STANDARD_IA" },
+          { days = 90, storage_class = "GLACIER_IR" },
+          { days = 180, storage_class = "GLACIER" },
+          { days = 365, storage_class = local.long_term_storage_class },
+        ]
+        expiration_days = null
+      }
+    }
+    fluent_bit = {
+      destinations = { cloudwatch = true, s3 = false }
+      cloudwatch = {
+        retention_days = 7
+        log_class      = "INFREQUENT_ACCESS"
+      }
+    }
+  }
+
+  # --------------------------------------------------------------------------------
+  # Log bucket Object Lock (WORM)
+  # --------------------------------------------------------------------------------
+  # enabled = true はバケット作成時のみ設定可能 (不可逆)。既存バケットを on に切替
+  # する場合は recreate (= データ移行) が必要。default_retention をセットすると
+  # バケット内 **全 object** に retention が適用される (prefix 単位の default は不可)。
+  log_buckets = {
+    access_logs = {
+      object_lock = {
+        enabled           = false
+        default_retention = null
+        # 例: { mode = "COMPLIANCE", days = 3650 }
+      }
+    }
+    waf_logs = {
+      object_lock = {
+        enabled           = false
+        default_retention = null
+      }
+    }
+  }
 
   # ALB idle timeout (connection keep-alive budget)
   alb_idle_timeout_seconds = 60

@@ -58,3 +58,9 @@ variable "flow_log_retention_days" {
   description = "Retention period (days) for VPC flow log CloudWatch group"
   type        = number
 }
+
+variable "flow_log_log_class" {
+  description = "CloudWatch Logs class for the flow log group (STANDARD | INFREQUENT_ACCESS). IA でコスト削減 (metric filter/subscription/data protection が制限される点に注意)。"
+  type        = string
+  default     = "INFREQUENT_ACCESS"
+}
