@@ -3,17 +3,35 @@
 # --------------------------------------------------------------------------------
 # Layout (one dir per logical function so a module with multiple distinct
 # handlers can scale by adding sibling dirs under files/):
-#   files/<fn>/src/        ← zipped to Lambda
-#   files/<fn>/requirements.txt
-#   files/<fn>/vendor.sh   ← re-vendor deps into src/ when requirements change
+#   files/<fn>/src/handler.py    ← function code (git)
+#   files/<fn>/requirements.txt  ← pure-Python deps (git)
+#   files/<fn>/build.sh          ← pip install + copy source (git)
+#   files/<fn>/build/            ← build output zipped into Lambda (gitignored)
 #
 # Both Lambdas in this module share the same handler code, so only one
 # function dir ("runner") exists and the archive is reused.
+#
+# null_resource runs build.sh whenever src/handler.py, requirements.txt, or
+# build.sh itself changes. archive_file depends on the build so the data
+# source read is deferred to apply, after build/ has been populated.
+
+resource "null_resource" "runner_build" {
+  triggers = {
+    handler      = filemd5("${path.module}/files/runner/src/handler.py")
+    requirements = filemd5("${path.module}/files/runner/requirements.txt")
+    build_sh     = filemd5("${path.module}/files/runner/build.sh")
+  }
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/files/runner/build.sh"
+  }
+}
 
 data "archive_file" "runner" {
   type        = "zip"
-  source_dir  = "${path.module}/files/runner/src"
+  source_dir  = "${path.module}/files/runner/build"
   output_path = "${path.module}/files/runner/lambda.zip"
+  depends_on  = [null_resource.runner_build]
 }
 
 # --------------------------------------------------------------------------------
