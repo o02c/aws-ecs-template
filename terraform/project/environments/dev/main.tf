@@ -89,6 +89,37 @@ module "db" {
 }
 
 # --------------------------------------------------------------------------------
+# DB SQL Runner (out-of-band SQL execution: DDL bootstrap + ad-hoc DML)
+# --------------------------------------------------------------------------------
+
+module "db_sql" {
+  source = "../../modules/db_sql"
+
+  project_name             = var.project_name
+  environment              = var.environment
+  aws_account_id           = data.aws_caller_identity.current.account_id
+  aws_region               = local.aws_region
+  vpc_id                   = module.network.vpc_id
+  private_subnet_ids       = module.network.private_subnet_ids
+  db_sql_security_group_id = module.network.security_group_ids["db-sql"]
+  db_security_group_id     = module.network.security_group_ids["db"]
+  db_host                  = module.db.cluster_endpoint
+  db_name                  = module.db.database_name
+  db_cluster_resource_id   = module.db.cluster_resource_id
+  master_username          = var.db_master_username
+  master_user_secret_arn   = module.db.master_user_secret_arn
+  dml_username             = local.db_sql.dml_username
+  secrets_kms_key_arn      = module.kms.key_arns["secrets"]
+  rds_kms_key_arn          = module.kms.key_arns["rds"]
+  logs_kms_key_arn         = module.kms.key_arns["logs"]
+  log_bucket_id            = module.logging.bucket_id
+  log_retention_days       = local.db_sql.log_retention_days
+
+  shared_private_subnet_cidrs = data.terraform_remote_state.shared.outputs.shared_private_subnet_cidrs
+  s3_prefix_list_id           = module.network.s3_prefix_list_id
+}
+
+# --------------------------------------------------------------------------------
 # Load Balancer (per-lane)
 # --------------------------------------------------------------------------------
 

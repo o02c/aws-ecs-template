@@ -217,6 +217,7 @@ s3-empty:
         "{{project_name}}-{{environment}}-admin-assets" \
         "{{project_name}}-{{environment}}-access-logs-${ACCOUNT_ID}" \
         "{{project_name}}-{{environment}}-athena-results-${ACCOUNT_ID}" \
+        "{{project_name}}-{{environment}}-db-sql-${ACCOUNT_ID}" \
         "aws-waf-logs-{{project_name}}-{{environment}}-${ACCOUNT_ID}"; do
         echo "--- Emptying $bucket ---"
         aws s3 rm "s3://$bucket" --recursive 2>/dev/null || true
@@ -227,6 +228,58 @@ s3-empty:
 # --------------------------------------------------------------------------------
 # Utility
 # --------------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------------
+# DB SQL Runner (out-of-band SQL via Lambda)
+# --------------------------------------------------------------------------------
+# Two Lambdas are deployed by module.db_sql:
+#   - {{project_name}}-{{environment}}-db-sql-ddl  (master user via Secrets Manager)
+#   - {{project_name}}-{{environment}}-db-sql-dml  (RDS IAM auth as dml_username)
+#
+# Initial bootstrap (run once after first project-apply) creates the DML role:
+#   just db-sql-ddl "CREATE ROLE app_rw LOGIN; GRANT rds_iam TO app_rw; \
+#                    GRANT CONNECT ON DATABASE app TO app_rw; \
+#                    GRANT USAGE, CREATE ON SCHEMA public TO app_rw;"
+#
+# Long SQL: stage to S3 then invoke with the key:
+#   aws s3 cp ./patch.sql s3://<bucket>/ddl/2026-05-19-patch.sql
+#   just db-sql-ddl-file ddl/2026-05-19-patch.sql
+
+_db-sql-invoke fn payload:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out=$(mktemp)
+    aws lambda invoke \
+        --function-name "{{fn}}" \
+        --cli-binary-format raw-in-base64-out \
+        --payload '{{payload}}' \
+        --log-type Tail \
+        --query 'LogResult' --output text "$out" \
+        | base64 -d
+    echo "--- response ---"
+    cat "$out"
+    echo ""
+    rm -f "$out"
+
+# Run inline DDL via the master-user Lambda
+db-sql-ddl sql:
+    @just _db-sql-invoke "{{project_name}}-{{environment}}-db-sql-ddl" \
+        "$(jq -nc --arg sql '{{sql}}' '{sql:$sql}')"
+
+# Run DDL from an S3 file (key must start with ddl/)
+db-sql-ddl-file key:
+    @just _db-sql-invoke "{{project_name}}-{{environment}}-db-sql-ddl" \
+        "$(jq -nc --arg k '{{key}}' '{s3_key:$k}')"
+
+# Run inline DML via the IAM-auth Lambda (pass fetch=true to return rows)
+db-sql-dml sql fetch="false":
+    @just _db-sql-invoke "{{project_name}}-{{environment}}-db-sql-dml" \
+        "$(jq -nc --arg sql '{{sql}}' --argjson f {{fetch}} '{sql:$sql, fetch:$f}')"
+
+# Run DML from an S3 file (key must start with dml/)
+db-sql-dml-file key fetch="false":
+    @just _db-sql-invoke "{{project_name}}-{{environment}}-db-sql-dml" \
+        "$(jq -nc --arg k '{{key}}' --argjson f {{fetch}} '{s3_key:$k, fetch:$f}')"
 
 # --------------------------------------------------------------------------------
 # Athena (access-log analysis)

@@ -27,3 +27,13 @@ output "rds_iam_auth_policy_arn" {
   description = "ARN of the RDS IAM authentication policy"
   value       = aws_iam_policy.rds_iam_auth.arn
 }
+
+output "master_user_secret_arn" {
+  description = "ARN of the AWS-managed master user Secrets Manager secret"
+  value       = aws_rds_cluster.this.master_user_secret[0].secret_arn
+}
+
+output "database_name" {
+  description = "Initial database name"
+  value       = aws_rds_cluster.this.database_name
+}
