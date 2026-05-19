@@ -217,6 +217,14 @@ locals {
     skip_final_snapshot     = true
   }
 
+  # db_sql Lambda. master_username (db_config 経由) は DDL Lambda が利用。
+  # DML Lambda は IAM 認証で dml_username に接続するため、初回のみ DDL Lambda 経由で
+  # `CREATE ROLE <dml_username> LOGIN; GRANT rds_iam TO <dml_username>;` 等の bootstrap が必要。
+  db_sql = {
+    dml_username       = "app_rw"
+    log_retention_days = 30
+  }
+
   # KMS keys managed at the project state layer. Used by Aurora / S3 / CloudWatch /
   # Secrets Manager for this project. shared 側と同名 key (logs) があっても、
   # それぞれ別の state で別の resource 群を暗号化している（§8）。
@@ -267,7 +275,7 @@ locals {
   }
 
   security_groups = toset(concat(
-    ["ecs", "db"],
+    ["ecs", "db", "db-sql"],
     [for lane in keys(local.lanes) : "${lane}-alb"]
   ))
 
