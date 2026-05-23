@@ -17,4 +17,5 @@ if settings.DEBUG:
         path("api/test/audit", views.test_audit),
         path("api/test/send-email", views.send_test_email),
         path("api/test/app-resources", views.test_app_resources),
+        path("api/test/db", views.test_db),
     ]

@@ -2,9 +2,11 @@ import json
 import logging
 import os
 import re
+import ssl
 import uuid
 
 import boto3
+import pg8000.dbapi
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -33,8 +35,16 @@ MAX_EMAIL_SUBJECT = 200
 
 EXT_PATTERN = re.compile(r"^\.[a-zA-Z0-9]{1,10}$")
 
+DB_HOST = os.environ.get("DB_HOST", "")
+DB_PORT = int(os.environ.get("DB_PORT", "5432"))
+DB_NAME = os.environ.get("DB_NAME", "")
+DB_USER = os.environ.get("DB_USER", "")
+# Installed in Dockerfile from truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+RDS_CA_BUNDLE = "/etc/ssl/certs/rds-global-bundle.pem"
+
 s3 = boto3.client("s3")
 ses = boto3.client("sesv2", endpoint_url=SES_ENDPOINT_URL)
+rds_client = boto3.client("rds")
 
 
 def _read_app_resource(key: str) -> dict:
@@ -59,6 +69,42 @@ if APP_RESOURCES_BUCKET:
         "app-resources startup read: %s",
         json.dumps({"bucket": APP_RESOURCES_BUCKET, "lane": LANE, "result": APP_RESOURCES_STARTUP_READ}),
     )
+
+
+def _db_ping() -> dict:
+    # IAM-auth: generate_db_auth_token returns a 15-min presigned password.
+    # Single-shot connection — sufficient for startup verification.
+    if not (DB_HOST and DB_NAME and DB_USER):
+        return {"ok": False, "error": "DB env unset"}
+    try:
+        region = boto3.session.Session().region_name
+        token = rds_client.generate_db_auth_token(
+            DBHostname=DB_HOST, Port=DB_PORT, DBUsername=DB_USER, Region=region
+        )
+        conn = pg8000.dbapi.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            database=DB_NAME,
+            user=DB_USER,
+            password=token,
+            ssl_context=ssl.create_default_context(cafile=RDS_CA_BUNDLE),
+        )
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            row = cur.fetchone()
+            return {"ok": True, "result": row[0] if row else None}
+        finally:
+            conn.close()
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__, "detail": str(exc)}
+
+
+DB_STARTUP_PING = _db_ping() if DB_HOST else {"ok": False, "error": "DB env unset"}
+logger.info(
+    "db startup ping: %s",
+    json.dumps({"host": DB_HOST, "user": DB_USER, "result": DB_STARTUP_PING}),
+)
 
 
 @require_GET
@@ -119,6 +165,24 @@ def get_file_url(request, file_id):
 # --------------------------------------------------------------------------------
 # Test endpoints for verifying structured logging
 # --------------------------------------------------------------------------------
+
+
+@require_GET
+def test_db(request):
+    """Aurora IAM-auth connectivity check.
+
+    No query: returns the cached startup-time ping result.
+    ?live=1: runs a fresh SELECT 1 (useful after the 15-min IAM token TTL).
+    """
+    if request.GET.get("live") == "1":
+        result = _db_ping()
+        status = 200 if result["ok"] else 503
+        return JsonResponse({"live": True, **result}, status=status)
+    status = 200 if DB_STARTUP_PING.get("ok") else 503
+    return JsonResponse(
+        {"host": DB_HOST, "user": DB_USER, "startup_ping": DB_STARTUP_PING},
+        status=status,
+    )
 
 
 @require_GET

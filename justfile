@@ -236,10 +236,13 @@ s3-empty:
 #   - {{project_name}}-{{environment}}-db-sql-ddl  (master user via Secrets Manager)
 #   - {{project_name}}-{{environment}}-db-sql-dml  (RDS IAM auth as dml_username)
 #
-# Initial bootstrap (run once after first project-apply) creates the DML role:
-#   just db-sql-ddl "CREATE ROLE app_rw LOGIN; GRANT rds_iam TO app_rw; \
-#                    GRANT CONNECT ON DATABASE app TO app_rw; \
-#                    GRANT USAGE, CREATE ON SCHEMA public TO app_rw;"
+# Initial bootstrap (run once after first project-apply):
+#   - DML Lambda role (db_sql IAM auth target):
+#       just db-sql-ddl "CREATE ROLE app_rw LOGIN; GRANT rds_iam TO app_rw; \
+#                        GRANT CONNECT ON DATABASE app TO app_rw; \
+#                        GRANT USAGE, CREATE ON SCHEMA public TO app_rw;"
+#   - ECS task IAM auth role (matches db_config.iam_username = "app"):
+#       just db-bootstrap-app
 #
 # Long SQL: stage to S3 then invoke with the key:
 #   aws s3 cp ./patch.sql s3://<bucket>/ddl/2026-05-19-patch.sql
@@ -249,17 +252,19 @@ _db-sql-invoke fn payload:
     #!/usr/bin/env bash
     set -euo pipefail
     out=$(mktemp)
+    payload_file=$(mktemp)
+    trap 'rm -f "$out" "$payload_file"' EXIT
+    printf '%s' {{ quote(payload) }} > "$payload_file"
     aws lambda invoke \
         --function-name "{{fn}}" \
         --cli-binary-format raw-in-base64-out \
-        --payload '{{payload}}' \
+        --payload "fileb://$payload_file" \
         --log-type Tail \
         --query 'LogResult' --output text "$out" \
         | base64 -d
     echo "--- response ---"
     cat "$out"
     echo ""
-    rm -f "$out"
 
 # Run inline DDL via the master-user Lambda
 db-sql-ddl sql:
@@ -280,6 +285,29 @@ db-sql-dml sql fetch="false":
 db-sql-dml-file key fetch="false":
     @just _db-sql-invoke "{{project_name}}-{{environment}}-db-sql-dml" \
         "$(jq -nc --arg k '{{key}}' --argjson f {{fetch}} '{s3_key:$k, fetch:$f}')"
+
+# Bootstrap the ECS-app IAM role in PostgreSQL (idempotent).
+# Matches db_config.iam_username = "app". rds-db:connect on this dbuser is
+# already granted to every task role via module.db.rds_iam_auth_policy_arn.
+# Re-runnable; CREATE ROLE is gated on pg_roles, GRANTs are no-ops if already set.
+db-bootstrap-app:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    sql=$(cat <<'SQL'
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app') THEN
+        CREATE ROLE app LOGIN;
+      END IF;
+    END
+    $$;
+    GRANT rds_iam TO app;
+    GRANT CONNECT ON DATABASE app TO app;
+    GRANT USAGE ON SCHEMA public TO app;
+    SQL
+    )
+    payload=$(jq -nc --arg s "$sql" '{sql:$s}')
+    just _db-sql-invoke "{{project_name}}-{{environment}}-db-sql-ddl" "$payload"
 
 # --------------------------------------------------------------------------------
 # Athena (access-log analysis)

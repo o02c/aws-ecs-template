@@ -47,6 +47,10 @@ CloudFront (single distribution, path-routed)
 - Aurora PostgreSQL Serverless v2
 - IAM database authentication enabled
 - Shared across all lanes
+- Bootstrap (one-time per env): `just db-bootstrap-app` creates the `app`
+  PostgreSQL role with `rds_iam` so ECS tasks can connect via IAM auth. Tasks
+  verify connectivity at gunicorn worker boot (`SELECT 1` via pg8000); result
+  is reflected in `/api/test/db` and `scripts/verify-deploy.sh` step 10.
 
 ### CDN (single distribution, path-routed)
 - 1 CloudFront distribution shared across lanes; path patterns select the origin

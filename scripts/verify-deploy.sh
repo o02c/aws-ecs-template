@@ -42,7 +42,7 @@ echo "=== Verify Deploy: ${PROJECT_NAME}-${ENVIRONMENT} @ ${DOMAIN_NAME} ==="
 # 1. HTTPS health check (all lanes — single domain, path-routed)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [1/9] HTTPS Health ---"
+echo "--- [1/10] HTTPS Health ---"
 for lane in "${LANES[@]}"; do
   url="$(lane_url "$lane")/api/health"
   code=$(curl -sSk --max-time 10 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
@@ -57,7 +57,7 @@ done
 # 2. TLS / cert hygiene (single host)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [2/9] TLS / Certificate ---"
+echo "--- [2/10] TLS / Certificate ---"
 host="${DOMAIN_NAME}"
 tls_info=$(echo | openssl s_client -connect "${host}:443" -servername "${host}" -brief 2>&1 | grep -E 'Protocol version|Ciphersuite|Verification' || true)
 protocol=$(echo "$tls_info" | grep 'Protocol version' | awk -F': ' '{print $2}')
@@ -78,7 +78,7 @@ fi
 # 3. Generate traffic to populate log destinations
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [3/9] Generate traffic (3 requests per lane) ---"
+echo "--- [3/10] Generate traffic (3 requests per lane) ---"
 for lane in "${LANES[@]}"; do
   for _ in 1 2 3; do
     curl -sSk --max-time 10 "$(lane_url "$lane")/api/health" > /dev/null 2>&1 || true
@@ -88,10 +88,14 @@ echo "  Waiting 120s for downstream log pipelines (Firehose 60s buffer, VPC flow
 sleep 120
 
 # --------------------------------------------------------------------------------
-# 4. CloudWatch Logs destinations (infra-level only — ECS logs go to S3)
+# 4. CloudWatch Logs destinations (infra-level only)
 # --------------------------------------------------------------------------------
+# Shared VPC flow logs still publish to CloudWatch; project VPC flow logs were
+# moved to S3-only in PR #55 (vpc_flow.destinations.cloudwatch = false), so we
+# only check the shared group here. ECS / WAF logs also live in S3, verified
+# in step 5 below.
 echo ""
-echo "--- [4/9] CloudWatch Logs (VPC flow only) ---"
+echo "--- [4/10] CloudWatch Logs (shared VPC flow only) ---"
 
 check_cw_group_has_events() {
   local region="$1" lg="$2" label="$3"
@@ -110,15 +114,13 @@ check_cw_group_has_events() {
   fi
 }
 
-# VPC flow logs (shared + project) — only CWL destinations left; WAF now goes to S3
-check_cw_group_has_events "$AWS_REGION" "/aws/vpc/flow-log/shared-${ENVIRONMENT}"          "VPC flow shared"
-check_cw_group_has_events "$AWS_REGION" "/aws/vpc/flow-log/${PROJECT_NAME}-${ENVIRONMENT}" "VPC flow project"
+check_cw_group_has_events "$AWS_REGION" "/aws/vpc/flow-log/shared-${ENVIRONMENT}" "VPC flow shared"
 
 # --------------------------------------------------------------------------------
 # 5. S3 Log Destinations (all logs land in the single access-log bucket)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [5/9] S3 Log Destinations (single bucket, prefix-separated) ---"
+echo "--- [5/10] S3 Log Destinations (single bucket, prefix-separated) ---"
 
 check_s3_prefix() {
   local bucket="$1" prefix="$2" label="$3" mandatory="${4:-1}"
@@ -159,7 +161,7 @@ check_s3_prefix "$ACCESS_LOG_BUCKET" "fluent-bit/" "FireLens config" 0
 # 6. Bucket / log group security posture (spot checks)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [6/9] Security Posture Spot Checks ---"
+echo "--- [6/10] Security Posture Spot Checks ---"
 
 for b in "$ACCESS_LOG_BUCKET" "$WAF_LOG_BUCKET" "${PROJECT_NAME}-${ENVIRONMENT}-user-assets" "${PROJECT_NAME}-${ENVIRONMENT}-admin-assets"; do
   pab=$(aws s3api get-public-access-block --bucket "$b" --query 'PublicAccessBlockConfiguration' --output json 2>/dev/null || echo "{}")
@@ -183,7 +185,7 @@ done
 # 7. SES / SNS subscription state (pending manual Gmail confirm)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [7/9] SES identity + SNS subscription state ---"
+echo "--- [7/10] SES identity + SNS subscription state ---"
 
 # Domain identity DKIM verification — iterate all domain identities
 while IFS= read -r domain; do
@@ -232,7 +234,7 @@ done
 # 8. CloudWatch Alarm inventory
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [8/9] CloudWatch Alarms ---"
+echo "--- [8/10] CloudWatch Alarms ---"
 
 alarm_names=$(aws cloudwatch describe-alarms \
   --alarm-name-prefix "${PROJECT_NAME}-${ENVIRONMENT}-" \
@@ -258,7 +260,7 @@ fi
 # 9. CloudFront Signed URL E2E (upload → issue signed URL → fetch → reject unsigned)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [9/9] CloudFront Signed URL E2E ---"
+echo "--- [9/10] CloudFront Signed URL E2E ---"
 
 user_url=$(lane_url user)
 test_file="/tmp/verify-deploy-signed-url-$$.txt"
@@ -286,6 +288,27 @@ else
   fi
 fi
 rm -f "$test_file"
+
+# --------------------------------------------------------------------------------
+# 10. Aurora IAM-auth connectivity (ECS task → DB via /api/test/db)
+# --------------------------------------------------------------------------------
+# /api/test/db is DEBUG-gated; the dev task def sets DJANGO_DEBUG=true. The
+# endpoint returns 200 only if the task's IAM auth token + SG rule + role
+# bootstrap (just db-bootstrap-app) all line up.
+echo ""
+echo "--- [10/10] Aurora IAM-auth ---"
+
+for lane in "${LANES[@]}"; do
+  url="$(lane_url "$lane")/api/test/db?live=1"
+  body=$(curl -sSk --max-time 15 -w '\n%{http_code}' "$url" 2>/dev/null || printf '\n000')
+  code=$(echo "$body" | tail -n1)
+  payload=$(echo "$body" | sed '$d')
+  if [ "$code" = "200" ]; then
+    ok "${lane} → SELECT 1 (live)"
+  else
+    fail "${lane} → ${code} ${payload:0:160}"
+  fi
+done
 
 echo ""
 if [ "$FAILED" -eq 0 ]; then
