@@ -1,7 +1,7 @@
 # --------------------------------------------------------------------------------
 # Access Log Bucket
 # --------------------------------------------------------------------------------
-# ALB / CloudFront / S3 server access / Firehose (audit, ecs-logs) / VPC Flow Logs
+# ALB / CloudFront / S3 server access / Firehose (audit, ecs-logs-app, ecs-logs-nginx) / VPC Flow Logs
 # を prefix ごとに集約。lifecycle は lifecycle.tf で log_retention map から生成。
 # Object Lock の on/off は var.log_buckets.access_logs.object_lock で制御。
 # enabled=true への切替はバケット recreate を伴うため要注意 (不可逆)。

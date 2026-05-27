@@ -317,6 +317,23 @@ db-bootstrap-app:
 athena-create-cf-table:
     bash scripts/athena-query.sh athena/cloudfront/01_create_table.sql
 
+# Create the ECS app-container partitioned table (idempotent).
+athena-create-ecs-app-table:
+    bash scripts/athena-query.sh athena/ecs-app/01_create_table.sql
+
+# Create the ECS nginx-sidecar partitioned table (idempotent).
+athena-create-ecs-nginx-table:
+    bash scripts/athena-query.sh athena/ecs-nginx/01_create_table.sql
+
+# Create the audit-log partitioned table (idempotent).
+athena-create-audit-table:
+    bash scripts/athena-query.sh athena/audit/01_create_table.sql
+
+# Create the JST-companion views (idempotent — CREATE OR REPLACE).
+athena-create-ecs-views:
+    bash scripts/athena-query.sh athena/ecs-app/03_create_view_jst.sql
+    bash scripts/athena-query.sh athena/ecs-nginx/03_create_view_jst.sql
+
 # Run a saved query file. Pass DIST=EXXXXXXXX (or pull it from terraform output).
 # Example: just athena-cf athena/cloudfront/02_sample_queries.sql DIST=E1ABC...
 athena-cf sql dist="":

@@ -44,11 +44,23 @@ locals {
         expiration_days = null
       }
     }
-    ecs_logs = {
+    ecs_logs_app = {
       destinations = { cloudwatch = false, s3 = true }
       s3 = {
         bucket = "access_logs"
-        prefix = "ecs-logs/"
+        prefix = "ecs-logs-app/"
+        transitions = [
+          { days = 90, storage_class = "GLACIER_IR" },
+          { days = 365, storage_class = local.long_term_storage_class },
+        ]
+        expiration_days = 1825 # 5y
+      }
+    }
+    ecs_logs_nginx = {
+      destinations = { cloudwatch = false, s3 = true }
+      s3 = {
+        bucket = "access_logs"
+        prefix = "ecs-logs-nginx/"
         transitions = [
           { days = 90, storage_class = "GLACIER_IR" },
           { days = 365, storage_class = local.long_term_storage_class },
@@ -185,10 +197,10 @@ locals {
   # must be clicked manually in Gmail. The domain DKIM is auto-verified.
   email = {
     enabled             = true
-    sender_address      = "no-reply@o2c.click"
+    sender_address      = "no-reply@oo2cc.click"
     mail_from_subdomain = "bounce"
     verified_recipients = ["ohtsuka.kentaro.o2c@gmail.com"]
-    dmarc_rua_address   = "postmaster@o2c.click"
+    dmarc_rua_address   = "postmaster@oo2cc.click"
   }
 
   # CloudWatch Alarm → SNS → Email

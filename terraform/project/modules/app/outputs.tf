@@ -38,6 +38,11 @@ output "fluent_bit_config_s3_arn" {
   value       = "arn:aws:s3:::${var.log_bucket_id}/${aws_s3_object.fluent_bit_config.key}"
 }
 
+output "fluent_bit_parsers_s3_arn" {
+  description = "S3 ARN of optional Fluent Bit parsers (python_json, nginx, nginx_json) loaded via init process"
+  value       = "arn:aws:s3:::${var.log_bucket_id}/${aws_s3_object.fluent_bit_parsers.key}"
+}
+
 output "firehose_stream_names" {
   description = "Map of firehose stream kind (audit / ecs-logs) to stream name"
   value       = { for k, s in aws_kinesis_firehose_delivery_stream.this : k => s.name }

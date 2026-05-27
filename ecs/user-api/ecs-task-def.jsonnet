@@ -20,6 +20,9 @@
       },
       environment: [
         { name: 'aws_fluent_bit_init_s3_1', value: "{{ tfstate `output.fluent_bit_config_s3_arn` }}" },
+        # Optional opt-in parsers (python_json / nginx / nginx_json). Registered
+        # but unused unless extra.conf references them — see files/fluent-bit-parsers.conf.
+        { name: 'aws_fluent_bit_init_s3_2', value: "{{ tfstate `output.fluent_bit_parsers_s3_arn` }}" },
         { name: 'aws_fluent_bit_init_file_1', value: '/fluent-bit/parsers/parsers.conf' },
         { name: 'AUDIT_STREAM', value: "{{ tfstate `output.firehose_stream_names['audit']` }}" },
       ],
@@ -59,7 +62,7 @@
         options: {
           Name: 'kinesis_firehose',
           region: 'ap-northeast-1',
-          delivery_stream: "{{ tfstate `output.firehose_stream_names['ecs-logs']` }}",
+          delivery_stream: "{{ tfstate `output.firehose_stream_names['ecs-logs-nginx']` }}",
         },
       },
       memoryReservation: 64,
@@ -94,7 +97,7 @@
         options: {
           Name: 'kinesis_firehose',
           region: 'ap-northeast-1',
-          delivery_stream: "{{ tfstate `output.firehose_stream_names['ecs-logs']` }}",
+          delivery_stream: "{{ tfstate `output.firehose_stream_names['ecs-logs-app']` }}",
         },
       },
       environment: [

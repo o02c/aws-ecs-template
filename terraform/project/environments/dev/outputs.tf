@@ -57,6 +57,11 @@ output "fluent_bit_config_s3_arn" {
   value       = module.app.fluent_bit_config_s3_arn
 }
 
+output "fluent_bit_parsers_s3_arn" {
+  description = "S3 ARN of optional Fluent Bit parsers (python_json, nginx, nginx_json)"
+  value       = module.app.fluent_bit_parsers_s3_arn
+}
+
 
 output "domain_name" {
   description = "Single public FQDN (all lanes share this; path_prefix selects the lane)"
