@@ -21,7 +21,7 @@ variable "aws_account_id" {
 variable "log_retention" {
   description = <<-EOT
     Per-log-kind retention/destination config. Map key is the log kind
-    (audit / ecs_logs / vpc_flow / alb_access / cloudfront_access / s3_access / waf / fluent_bit).
+    (audit / ecs_logs_app / ecs_logs_nginx / vpc_flow / alb_access / cloudfront_access / s3_access / waf / fluent_bit).
     destinations.s3 = true で S3 prefix lifecycle が生成され、destinations.cloudwatch
     は各モジュール側で CW Log Group の有無を決める。
   EOT

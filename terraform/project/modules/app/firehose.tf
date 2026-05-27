@@ -1,15 +1,19 @@
 # --------------------------------------------------------------------------------
 # Firehose delivery streams — route ECS container logs to the shared log bucket.
 # --------------------------------------------------------------------------------
-# 2 streams into the same access-log bucket but at different prefixes:
-#   - audit:    structured events tagged `type=audit` (restricted IAM access later)
-#   - ecs-logs: everything else (nginx stdout/stderr + app stdout non-audit)
+# 3 streams into the same access-log bucket at different prefixes:
+#   - audit:          structured events tagged `type=audit` (separate IAM scope later)
+#   - ecs-logs-app:   app container stdout/stderr (non-audit)
+#   - ecs-logs-nginx: nginx sidecar stdout/stderr
+# Splitting by container yields per-container partition pruning in Athena and
+# lets each table carry only its container's columns (cleaner schema).
 # No CloudWatch Logs involved for container output; only FireLens → Firehose → S3.
 
 locals {
   firehose_streams = {
-    audit    = { s3_prefix = "audit" }
-    ecs-logs = { s3_prefix = "ecs-logs" }
+    audit          = { s3_prefix = "audit" }
+    ecs-logs-app   = { s3_prefix = "ecs-logs-app" }
+    ecs-logs-nginx = { s3_prefix = "ecs-logs-nginx" }
   }
 }
 

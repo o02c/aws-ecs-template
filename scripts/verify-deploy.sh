@@ -25,7 +25,7 @@ lane_url() {
   echo "https://${DOMAIN_NAME}$(lane_path_prefix "$1")"
 }
 # SERVICES intentionally not listed — ECS logs skip CloudWatch and go through
-# Firehose → S3 ${ACCESS_LOG_BUCKET}/ecs-logs/ and ${ACCESS_LOG_BUCKET}/audit/.
+# Firehose → S3 ${ACCESS_LOG_BUCKET}/ecs-logs-app|nginx/ and ${ACCESS_LOG_BUCKET}/audit/.
 
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ACCESS_LOG_BUCKET="${PROJECT_NAME}-${ENVIRONMENT}-access-logs-${ACCOUNT_ID}"
@@ -150,8 +150,9 @@ done
 # AWSLogs/<account>/WAFLogs/cloudfront/<webacl>/... — for scope=CLOUDFRONT the
 # path segment is literally `cloudfront`, not `us-east-1`.
 check_s3_prefix "$WAF_LOG_BUCKET" "AWSLogs/${ACCOUNT_ID}/WAFLogs/cloudfront/${PROJECT_NAME}-${ENVIRONMENT}/" "WAF (direct S3)" 0
-# ECS container logs (via Firehose, all non-audit records)
-check_s3_prefix "$ACCESS_LOG_BUCKET" "ecs-logs/" "ECS logs (Firehose)" 0
+# ECS container logs (Firehose, split by container: app vs nginx, non-audit)
+check_s3_prefix "$ACCESS_LOG_BUCKET" "ecs-logs-app/" "ECS app logs (Firehose)" 0
+check_s3_prefix "$ACCESS_LOG_BUCKET" "ecs-logs-nginx/" "ECS nginx logs (Firehose)" 0
 # Audit records (type=audit, Firehose separated)
 check_s3_prefix "$ACCESS_LOG_BUCKET" "audit/" "Audit (Firehose)" 0
 # Fluent Bit config object (uploaded during apply)

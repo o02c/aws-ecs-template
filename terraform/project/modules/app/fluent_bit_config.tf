@@ -12,3 +12,14 @@ resource "aws_s3_object" "fluent_bit_config" {
   etag         = filemd5("${path.module}/files/fluent-bit-extra.conf")
   content_type = "text/plain"
 }
+
+# Optional parsers (python_json, nginx_json, nginx). Registered with Fluent Bit
+# at startup but unused unless a FILTER in fluent-bit-extra.conf references one
+# by name — see the file's header for opt-in instructions.
+resource "aws_s3_object" "fluent_bit_parsers" {
+  bucket       = var.log_bucket_id
+  key          = "fluent-bit/parsers.conf"
+  source       = "${path.module}/files/fluent-bit-parsers.conf"
+  etag         = filemd5("${path.module}/files/fluent-bit-parsers.conf")
+  content_type = "text/plain"
+}
