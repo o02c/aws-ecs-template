@@ -26,7 +26,7 @@
       logConfiguration: {
         logDriver: 'awslogs',
         options: {
-          'awslogs-group': "{{ tfstate `module.app.aws_cloudwatch_log_group.fluent_bit.name` }}",
+          'awslogs-group': "{{ tfstate `module.app.aws_cloudwatch_log_group.fluent_bit[0].name` }}",
           'awslogs-region': 'ap-northeast-1',
           'awslogs-stream-prefix': 'user-api',
         },
@@ -149,6 +149,24 @@
           # reachable from the private ECS SG; pin to the VPCE-served hostname.
           name: 'SES_ENDPOINT_URL',
           value: 'https://email.ap-northeast-1.api.aws',
+        },
+        # Aurora IAM auth. DB_USER matches db_config.iam_username; task role's
+        # rds_iam_auth_policy allows rds-db:connect on this dbuser only.
+        {
+          name: 'DB_HOST',
+          value: "{{ tfstate `module.db.aws_rds_cluster.this.endpoint` }}",
+        },
+        {
+          name: 'DB_PORT',
+          value: '5432',
+        },
+        {
+          name: 'DB_NAME',
+          value: "{{ tfstate `module.db.aws_rds_cluster.this.database_name` }}",
+        },
+        {
+          name: 'DB_USER',
+          value: 'app',
         },
       ],
       secrets: [

@@ -2,6 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# RDS Global CA bundle (Aurora cert validation) — debian-slim trust store doesn't
+# include AWS PCA roots, so we install the official AWS-served bundle.
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+RUN chmod 644 /etc/ssl/certs/rds-global-bundle.pem
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
