@@ -49,6 +49,11 @@ resource "aws_lambda_function" "ddl" {
 
   source_code_hash = data.archive_file.runner.output_base64sha256
 
+  # Environment variables carry DB connection details + master secret ARN;
+  # encrypt them at rest with the secrets CMK (both roles already hold
+  # kms:Decrypt on this key for SQL-object envelope decryption).
+  kms_key_arn = var.secrets_kms_key_arn
+
   vpc_config {
     subnet_ids         = values(var.private_subnet_ids)
     security_group_ids = [var.db_sql_security_group_id]
@@ -96,6 +101,10 @@ resource "aws_lambda_function" "dml" {
   memory_size   = 256
 
   source_code_hash = data.archive_file.runner.output_base64sha256
+
+  # Encrypt environment variables at rest with the secrets CMK (the dml role
+  # already holds kms:Decrypt on this key for SQL-object envelope decryption).
+  kms_key_arn = var.secrets_kms_key_arn
 
   vpc_config {
     subnet_ids         = values(var.private_subnet_ids)

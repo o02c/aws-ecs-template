@@ -204,8 +204,14 @@ resource "aws_iam_role_policy" "task_firelens" {
         ]
       },
       {
-        Effect   = "Allow"
-        Action   = "kms:Decrypt"
+        # kms:Decrypt for reading SSE-KMS config objects from the log bucket;
+        # kms:GenerateDataKey for PutRecordBatch into the CMK-encrypted Firehose
+        # stream (CUSTOMER_MANAGED_CMK SSE — see firehose.tf server_side_encryption).
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+        ]
         Resource = var.s3_kms_key_arn
       }
     ]

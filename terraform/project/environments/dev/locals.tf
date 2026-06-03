@@ -258,6 +258,10 @@ locals {
       description = "CMK for Secrets Manager encryption"
       service     = null
     }
+    ecr = {
+      description = "CMK for ECR repository encryption"
+      service     = null
+    }
     sns = {
       description = "CMK for SNS topic encryption (CloudWatch Alarm publishes)"
       service     = "cloudwatch.amazonaws.com"

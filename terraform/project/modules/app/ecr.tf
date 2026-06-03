@@ -13,6 +13,11 @@ resource "aws_ecr_repository" "this" {
     scan_on_push = true
   }
 
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = var.ecr_kms_key_arn
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-${each.key}"
   }
@@ -56,6 +61,11 @@ resource "aws_ecr_repository" "nginx" {
 
   image_scanning_configuration {
     scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = var.ecr_kms_key_arn
   }
 
   tags = {
