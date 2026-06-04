@@ -6,9 +6,16 @@
     { name: 'nginx-tmp' },
   ],
   containerDefinitions: [
+    // FireLens log router.
+    // readonlyRootFilesystem ON — the init image falls back to /tmp/init when
+    // /init is read-only (canWriteToDir check in fluent_bit_init_process), so an
+    // in-memory tmpfs at /tmp is the only writable surface it needs. No disk
+    // buffering: outputs go straight to Firehose, and /fluent-bit/etc/fluent-bit.conf
+    // (FireLens-generated) is only read/@INCLUDE'd, never written.
     {
       name: 'log_router',
       image: "{{ tfstate `output.ecr_public_cache_base_uri` }}/aws-observability/aws-for-fluent-bit:init-latest",
+      readonlyRootFilesystem: true,
       essential: true,
       stopTimeout: 30,
       firelensConfiguration: {
@@ -29,6 +36,12 @@
           'awslogs-region': 'ap-northeast-1',
           'awslogs-stream-prefix': 'admin-api',
         },
+      },
+      # In-memory scratch for the init process's /tmp/init fallback (read-only root FS).
+      linuxParameters: {
+        tmpfs: [
+          { containerPath: '/tmp', size: 64, mountOptions: ['noexec', 'nosuid', 'nodev'] },
+        ],
       },
       memoryReservation: 64,
     },

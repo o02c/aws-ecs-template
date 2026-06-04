@@ -7,12 +7,17 @@
   ],
   containerDefinitions: [
     // FireLens log router.
-    // NOTE: readonlyRootFilesystem OFF — init process writes to /fluent-bit/etc.
+    // readonlyRootFilesystem ON — the init image falls back to /tmp/init when
+    // /init is read-only (canWriteToDir check in fluent_bit_init_process), so an
+    // in-memory tmpfs at /tmp is the only writable surface it needs. No disk
+    // buffering: outputs go straight to Firehose, and /fluent-bit/etc/fluent-bit.conf
+    // (FireLens-generated) is only read/@INCLUDE'd, never written.
     // logConfiguration uses awslogs (fluent-bit can't route its own output via
     // FireLens). Short retention, trivial volume — diagnostic only.
     {
       name: 'log_router',
       image: "{{ tfstate `output.ecr_public_cache_base_uri` }}/aws-observability/aws-for-fluent-bit:init-latest",
+      readonlyRootFilesystem: true,
       essential: true,
       stopTimeout: 30,
       firelensConfiguration: {
@@ -33,6 +38,12 @@
           'awslogs-region': 'ap-northeast-1',
           'awslogs-stream-prefix': 'user-api',
         },
+      },
+      # In-memory scratch for the init process's /tmp/init fallback (read-only root FS).
+      linuxParameters: {
+        tmpfs: [
+          { containerPath: '/tmp', size: 64, mountOptions: ['noexec', 'nosuid', 'nodev'] },
+        ],
       },
       memoryReservation: 64,
     },
