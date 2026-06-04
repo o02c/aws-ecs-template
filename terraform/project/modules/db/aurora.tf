@@ -85,6 +85,33 @@ resource "aws_db_parameter_group" "this" {
   name   = "${var.project_name}-${var.environment}-instance"
   family = "aurora-postgresql16"
 
+  # Engine-log output (shipped to CloudWatch via enabled_cloudwatch_logs_exports).
+  # Without these, the postgresql log only carries errors/startup. All dynamic —
+  # applied without a reboot. Tune verbosity per env if log volume/cost matters.
+  parameter {
+    name  = "log_connections"
+    value = "1"
+  }
+  parameter {
+    name  = "log_disconnections"
+    value = "1"
+  }
+  parameter {
+    # Audit schema changes (CREATE/ALTER/DROP) without logging every query.
+    name  = "log_statement"
+    value = "ddl"
+  }
+  parameter {
+    # Slow-query log: statements taking >= 1s (milliseconds; -1 disables, 0 logs all).
+    name  = "log_min_duration_statement"
+    value = "1000"
+  }
+  parameter {
+    # Log sessions waiting longer than deadlock_timeout — lock contention signal.
+    name  = "log_lock_waits"
+    value = "1"
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-instance"
   }
