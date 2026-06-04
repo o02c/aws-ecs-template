@@ -85,6 +85,9 @@ module "db" {
   master_username = var.db_master_username
   kms_key_arn     = module.kms.key_arns["rds"]
 
+  logs_kms_key_arn         = module.kms.key_arns["logs"]
+  postgresql_log_retention = local.log_retention.db_postgresql
+
   db_config = local.db_config
 }
 

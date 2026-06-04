@@ -23,9 +23,15 @@ resource "aws_rds_cluster" "this" {
   final_snapshot_identifier           = "${var.project_name}-${var.environment}-final"
   backup_retention_period             = var.db_config.backup_retention_period
 
+  # Export the PostgreSQL engine log to the pre-created (retention + KMS) group.
+  enabled_cloudwatch_logs_exports = var.postgresql_log_retention.destinations.cloudwatch ? ["postgresql"] : []
+
   tags = {
     Name = "${var.project_name}-${var.environment}"
   }
+
+  # Ensure RDS publishes into our managed log group rather than auto-creating one.
+  depends_on = [aws_cloudwatch_log_group.postgresql]
 }
 
 # --------------------------------------------------------------------------------

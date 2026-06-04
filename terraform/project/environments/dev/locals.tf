@@ -141,6 +141,15 @@ locals {
         log_class      = "INFREQUENT_ACCESS"
       }
     }
+    # Aurora PostgreSQL engine log, exported to CloudWatch Logs by RDS. STANDARD
+    # class (not IA) so metric filters / alarms on DB errors stay available.
+    db_postgresql = {
+      destinations = { cloudwatch = true, s3 = false }
+      cloudwatch = {
+        retention_days = 30
+        log_class      = "STANDARD"
+      }
+    }
   }
 
   # --------------------------------------------------------------------------------

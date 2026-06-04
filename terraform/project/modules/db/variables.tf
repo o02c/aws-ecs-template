@@ -49,6 +49,31 @@ variable "kms_key_arn" {
   type        = string
 }
 
+variable "logs_kms_key_arn" {
+  description = "KMS key ARN for the CloudWatch Logs group holding exported PostgreSQL engine logs"
+  type        = string
+}
+
+variable "postgresql_log_retention" {
+  description = <<-EOT
+    Aurora PostgreSQL engine-log export settings. destinations.cloudwatch = false
+    skips both the log group and the cluster's enabled_cloudwatch_logs_exports.
+    log_class = "INFREQUENT_ACCESS" cuts cost but disables metric filters /
+    subscriptions / data protection.
+  EOT
+  type = object({
+    destinations = object({
+      cloudwatch = bool
+      s3         = bool
+    })
+    cloudwatch = optional(object({
+      retention_days = number
+      log_class      = string
+    }))
+    s3 = optional(any)
+  })
+}
+
 variable "db_config" {
   description = <<-EOT
     Aurora cluster / instance settings. Environment-specific values
