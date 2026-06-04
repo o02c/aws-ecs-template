@@ -227,6 +227,10 @@ locals {
     backup_retention_period = 7
     deletion_protection     = false
     skip_final_snapshot     = true
+    # Enhanced Monitoring: OS-level metrics (process list, per-device I/O, memory)
+    # to CloudWatch Logs every N seconds. 60 is the low-cost default; drop to
+    # 15/5/1 for finer resolution at higher CloudWatch Logs cost.
+    monitoring_interval = 60
   }
 
   # db_sql Lambda. master_username (db_config 経由) は DDL Lambda が利用。

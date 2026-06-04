@@ -42,6 +42,11 @@ resource "aws_rds_cluster_instance" "this" {
   engine_version          = aws_rds_cluster.this.engine_version
   db_parameter_group_name = aws_db_parameter_group.this.name
 
+  # Enhanced Monitoring (OS-level metrics to CloudWatch Logs). role_arn must be
+  # unset when the interval is 0, so gate it on the same toggle.
+  monitoring_interval = var.db_config.monitoring_interval
+  monitoring_role_arn = var.db_config.monitoring_interval > 0 ? aws_iam_role.rds_monitoring.arn : null
+
   tags = {
     Name = "${var.project_name}-${var.environment}-${each.key}"
   }

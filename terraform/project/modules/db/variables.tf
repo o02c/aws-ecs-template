@@ -64,5 +64,7 @@ variable "db_config" {
     backup_retention_period = number
     deletion_protection     = bool
     skip_final_snapshot     = bool
+    # Enhanced Monitoring granularity in seconds (0 disables; valid: 1/5/10/15/30/60).
+    monitoring_interval = number
   })
 }
