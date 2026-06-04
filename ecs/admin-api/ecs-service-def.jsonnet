@@ -13,7 +13,7 @@
   loadBalancers: [
     {
       containerName: 'nginx',
-      containerPort: 80,
+      containerPort: 8081,
       targetGroupArn: "{{ tfstate `output.target_group_arns['admin']` }}",
     },
   ],

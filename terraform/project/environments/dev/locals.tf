@@ -181,7 +181,7 @@ locals {
   }
 
   # Container port (ECS → ALB target group)
-  container_port = 80
+  container_port = 8081
 
   # CloudFront WAF rate limit (requests per 5-min per IP)
   waf_rate_limit = 2000

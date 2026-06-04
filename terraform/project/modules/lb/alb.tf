@@ -26,8 +26,13 @@ resource "aws_lb" "this" {
 # --------------------------------------------------------------------------------
 
 resource "aws_lb_target_group" "this" {
-  name                 = "${var.project_name}-${var.environment}-${var.lane}"
-  port                 = var.container_port
+  name = "${var.project_name}-${var.environment}-${var.lane}"
+  # target_type = ip registers each ECS task on its own container port, so this
+  # attribute is only a nominal default and is not used for routing/health checks
+  # (those follow the registered traffic-port = container_port). Pinned to 80 and
+  # kept independent of var.container_port: changing a live TG's port forces
+  # replacement, which fails while the running ECS service still holds the group.
+  port                 = 80
   protocol             = "HTTP"
   vpc_id               = var.vpc_id
   target_type          = "ip"

@@ -1,10 +1,8 @@
 {
-  volumes: [
-    { name: 'app-tmp' },
-    { name: 'nginx-cache' },
-    { name: 'nginx-run' },
-    { name: 'nginx-tmp' },
-  ],
+  # All containers run read-only root FS as non-root users; every writable path
+  # is an in-memory tmpfs (declared per-container in linuxParameters) rather than
+  # an ephemeral task volume, because Fargate task volumes mount root:root and a
+  # non-root user can't write to them (tmpfs mode=1777 sidesteps that).
   containerDefinitions: [
     // FireLens log router.
     // readonlyRootFilesystem ON — the init image falls back to /tmp/init when
@@ -17,6 +15,9 @@
     {
       name: 'log_router',
       image: "{{ tfstate `output.ecr_public_cache_base_uri` }}/aws-observability/aws-for-fluent-bit:init-latest",
+      # Non-root: the init image supports non-root mode (aws-for-fluent-bit #955) by
+      # falling back to /tmp/init. tmpfs below is mode=1777 so uid 10001 can write it.
+      user: '10001',
       readonlyRootFilesystem: true,
       essential: true,
       stopTimeout: 30,
@@ -42,7 +43,7 @@
       # In-memory scratch for the init process's /tmp/init fallback (read-only root FS).
       linuxParameters: {
         tmpfs: [
-          { containerPath: '/tmp', size: 64, mountOptions: ['noexec', 'nosuid', 'nodev'] },
+          { containerPath: '/tmp', size: 64, mountOptions: ['noexec', 'nosuid', 'nodev', 'mode=1777'] },
         ],
       },
       memoryReservation: 64,
@@ -50,11 +51,12 @@
     {
       name: 'nginx',
       image: "{{ tfstate `module.app.aws_ecr_repository.nginx.repository_url` }}:{{ env `NGINX_IMAGE_TAG` `latest` }}",
+      # nginx-unprivileged image runs as uid 101 by default (no `user` override needed).
       readonlyRootFilesystem: true,
       stopTimeout: 30,
       portMappings: [
         {
-          containerPort: 80,
+          containerPort: 8081,
           protocol: 'tcp',
         },
       ],
@@ -63,11 +65,6 @@
         { containerName: 'app', condition: 'HEALTHY' },
         { containerName: 'log_router', condition: 'START' },
       ],
-      mountPoints: [
-        { sourceVolume: 'nginx-cache', containerPath: '/var/cache/nginx', readOnly: false },
-        { sourceVolume: 'nginx-run', containerPath: '/var/run', readOnly: false },
-        { sourceVolume: 'nginx-tmp', containerPath: '/tmp', readOnly: false },
-      ],
       logConfiguration: {
         logDriver: 'awsfirelens',
         options: {
@@ -75,6 +72,14 @@
           region: 'ap-northeast-1',
           delivery_stream: "{{ tfstate `output.firehose_stream_names['ecs-logs-nginx']` }}",
         },
+      },
+      # Writable scratch for uid 101: pid (/tmp/nginx.pid) + proxy/client temp dirs
+      # (/var/cache/nginx/*). mode=1777 so the non-root nginx user can write.
+      linuxParameters: {
+        tmpfs: [
+          { containerPath: '/var/cache/nginx', size: 64, mountOptions: ['noexec', 'nosuid', 'nodev', 'mode=1777'] },
+          { containerPath: '/tmp', size: 16, mountOptions: ['noexec', 'nosuid', 'nodev', 'mode=1777'] },
+        ],
       },
       memoryReservation: 64,
     },
@@ -93,9 +98,13 @@
       dependsOn: [
         { containerName: 'log_router', condition: 'START' },
       ],
-      mountPoints: [
-        { sourceVolume: 'app-tmp', containerPath: '/tmp', readOnly: false },
-      ],
+      # Writable scratch for uid 10001 (gunicorn worker tmp dir + HOME). mode=1777
+      # so the non-root app user can write; Fargate task volumes would be root-owned.
+      linuxParameters: {
+        tmpfs: [
+          { containerPath: '/tmp', size: 64, mountOptions: ['nosuid', 'nodev', 'mode=1777'] },
+        ],
+      },
       healthCheck: {
         command: ['CMD-SHELL', "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')\""],
         interval: 15,
