@@ -141,6 +141,15 @@ locals {
         log_class      = "INFREQUENT_ACCESS"
       }
     }
+    # Aurora PostgreSQL engine log, exported to CloudWatch Logs by RDS. STANDARD
+    # class (not IA) so metric filters / alarms on DB errors stay available.
+    db_postgresql = {
+      destinations = { cloudwatch = true, s3 = false }
+      cloudwatch = {
+        retention_days = 30
+        log_class      = "STANDARD"
+      }
+    }
   }
 
   # --------------------------------------------------------------------------------
@@ -181,7 +190,7 @@ locals {
   }
 
   # Container port (ECS → ALB target group)
-  container_port = 80
+  container_port = 8081
 
   # CloudFront WAF rate limit (requests per 5-min per IP)
   waf_rate_limit = 2000
@@ -227,6 +236,10 @@ locals {
     backup_retention_period = 7
     deletion_protection     = false
     skip_final_snapshot     = true
+    # Enhanced Monitoring: OS-level metrics (process list, per-device I/O, memory)
+    # to CloudWatch Logs every N seconds. 60 is the low-cost default; drop to
+    # 15/5/1 for finer resolution at higher CloudWatch Logs cost.
+    monitoring_interval = 60
   }
 
   # db_sql Lambda. master_username (db_config 経由) は DDL Lambda が利用。
@@ -256,6 +269,10 @@ locals {
     }
     secrets = {
       description = "CMK for Secrets Manager encryption"
+      service     = null
+    }
+    ecr = {
+      description = "CMK for ECR repository encryption"
       service     = null
     }
     sns = {

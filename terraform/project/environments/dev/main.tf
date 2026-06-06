@@ -85,6 +85,9 @@ module "db" {
   master_username = var.db_master_username
   kms_key_arn     = module.kms.key_arns["rds"]
 
+  logs_kms_key_arn         = module.kms.key_arns["logs"]
+  postgresql_log_retention = local.log_retention.db_postgresql
+
   db_config = local.db_config
 }
 
@@ -193,6 +196,7 @@ module "app" {
   aws_account_id                      = data.aws_caller_identity.current.account_id
   aws_region                          = local.aws_region
   s3_kms_key_arn                      = module.kms.key_arns["s3"]
+  ecr_kms_key_arn                     = module.kms.key_arns["ecr"]
   log_bucket_id                       = module.logging.bucket_id
   container_port                      = local.container_port
   firehose_buffering_interval_seconds = local.firehose_buffering_interval_seconds

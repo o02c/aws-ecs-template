@@ -36,6 +36,17 @@ resource "aws_kinesis_firehose_delivery_stream" "this" {
     kms_key_arn        = var.s3_kms_key_arn
   }
 
+  # SSE on the delivery stream itself (DirectPut interim storage), separate from
+  # the extended_s3 destination encryption above. CUSTOMER_MANAGED_CMK requires
+  # the producer (FireLens task role) to hold kms:GenerateDataKey + kms:Decrypt
+  # on this key — see iam.tf task_firelens; CreateGrant is done by the apply
+  # principal via root-account delegation.
+  server_side_encryption {
+    enabled  = true
+    key_type = "CUSTOMER_MANAGED_CMK"
+    key_arn  = var.s3_kms_key_arn
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-${each.key}"
   }

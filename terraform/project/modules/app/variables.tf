@@ -141,6 +141,11 @@ variable "s3_kms_key_arn" {
   type        = string
 }
 
+variable "ecr_kms_key_arn" {
+  description = "KMS key ARN for ECR repository encryption (SSE-KMS)"
+  type        = string
+}
+
 variable "log_bucket_id" {
   description = "Shared access-log S3 bucket ID (owns audit/ + ecs-logs/ prefixes)"
   type        = string

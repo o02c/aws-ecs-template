@@ -9,6 +9,7 @@ resource "aws_kms_key" "this" {
 
   description             = each.value.description
   enable_key_rotation     = true
+  rotation_period_in_days = 365
   deletion_window_in_days = 30
   policy                  = data.aws_iam_policy_document.key[each.key].json
 
