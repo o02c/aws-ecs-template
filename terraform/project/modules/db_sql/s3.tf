@@ -54,6 +54,13 @@ resource "aws_s3_bucket_logging" "sql" {
   bucket        = aws_s3_bucket.sql.id
   target_bucket = var.log_bucket_id
   target_prefix = "s3/db-sql/"
+
+  # Date-partitioned keys for Athena (matches Firehose/VPC-flow layout).
+  target_object_key_format {
+    partitioned_prefix {
+      partition_date_source = "EventTime"
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "sql" {

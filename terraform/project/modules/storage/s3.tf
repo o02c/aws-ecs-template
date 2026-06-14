@@ -93,6 +93,14 @@ resource "aws_s3_bucket_logging" "this" {
   bucket        = aws_s3_bucket.this.id
   target_bucket = var.log_bucket_id
   target_prefix = var.log_prefix
+
+  # Partitioned keys (<prefix><account>/<region>/<bucket>/YYYY/MM/DD/...) so the
+  # logs are date-partitioned for Athena, matching the Firehose/VPC-flow layout.
+  target_object_key_format {
+    partitioned_prefix {
+      partition_date_source = "EventTime"
+    }
+  }
 }
 
 # NOTE: SSL enforcement + CloudFront OAC are merged into a single bucket policy
