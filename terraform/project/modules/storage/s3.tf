@@ -3,7 +3,8 @@
 # --------------------------------------------------------------------------------
 
 resource "aws_s3_bucket" "this" {
-  bucket = "${var.project_name}-${var.environment}-${var.lane}-assets"
+  bucket              = "${var.project_name}-${var.environment}-${var.lane}-assets"
+  object_lock_enabled = var.object_lock.enabled
 
   tags = {
     Name = "${var.project_name}-${var.environment}-${var.lane}-assets"
@@ -37,6 +38,51 @@ resource "aws_s3_bucket_public_access_block" "this" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# --------------------------------------------------------------------------------
+# Object Lock (WORM) + version lifecycle
+# --------------------------------------------------------------------------------
+# Ransomware/tamper protection for front-end assets. default_retention applies to
+# every object version; CI/CD overwrites create new (lockable) versions, so the
+# noncurrent-version expiration must be longer than the WORM retention or the
+# lifecycle delete would be blocked by the lock.
+
+resource "aws_s3_bucket_object_lock_configuration" "this" {
+  for_each = (
+    var.object_lock.enabled &&
+    var.object_lock.default_retention != null
+  ) ? { this = true } : {}
+
+  bucket = aws_s3_bucket.this.id
+
+  rule {
+    default_retention {
+      mode = var.object_lock.default_retention.mode
+      days = var.object_lock.default_retention.days
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
+  bucket = aws_s3_bucket.this.id
+
+  rule {
+    id     = "expire-noncurrent-and-abort-mpu"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.noncurrent_version_expiration_days
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
 }
 
 # --------------------------------------------------------------------------------

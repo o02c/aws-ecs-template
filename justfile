@@ -229,6 +229,11 @@ s3-empty:
 # Utility
 # --------------------------------------------------------------------------------
 
+# Enable Object Lock on assets buckets (backup → recreate → restore → verify).
+# Destructive: replaces each <lane>-assets bucket. Pass YES=1 to skip the prompt.
+migrate-assets-object-lock:
+    DOMAIN_NAME={{domain_name}} bash scripts/migrate-assets-object-lock.sh
+
 # --------------------------------------------------------------------------------
 # DB SQL Runner (out-of-band SQL via Lambda)
 # --------------------------------------------------------------------------------

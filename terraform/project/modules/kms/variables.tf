@@ -29,10 +29,14 @@ variable "keys" {
     - cloudfront_enabled: when true, grant CloudFront service principal
       kms:Decrypt for any object encrypted with this key. Used by the S3 key
       so CloudFront OAC can fetch KMS-encrypted origin objects.
+    - s3_event_notifications: when true, grant the S3 service principal
+      kms:GenerateDataKey*/kms:Decrypt so S3 can deliver bucket event
+      notifications to an SSE-KMS SNS topic encrypted with this key.
   EOT
   type = map(object({
-    description        = string
-    service            = string
-    cloudfront_enabled = optional(bool, false)
+    description            = string
+    service                = string
+    cloudfront_enabled     = optional(bool, false)
+    s3_event_notifications = optional(bool, false)
   }))
 }

@@ -32,3 +32,8 @@ output "athena_results_bucket_id" {
   description = "Bucket holding Athena query result objects"
   value       = aws_s3_bucket.athena_results.id
 }
+
+output "athena_results_bucket_arn" {
+  description = "ARN of the bucket holding Athena query result objects"
+  value       = aws_s3_bucket.athena_results.arn
+}
