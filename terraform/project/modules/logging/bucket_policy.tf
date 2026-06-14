@@ -78,7 +78,8 @@ resource "aws_s3_bucket_policy" "access_logs" {
         Resource = "${aws_s3_bucket.access_logs.arn}/s3/*"
         Condition = {
           StringEquals = {
-            "s3:x-amz-acl" = "bucket-owner-full-control"
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+            "aws:SourceAccount" = [var.aws_account_id]
           }
         }
       },
@@ -90,6 +91,11 @@ resource "aws_s3_bucket_policy" "access_logs" {
         }
         Action   = "s3:GetBucketAcl"
         Resource = aws_s3_bucket.access_logs.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = [var.aws_account_id]
+          }
+        }
       },
       # VPC Flow Logs S3 direct delivery (parquet + hive). AWS uses the same
       # delivery.logs.amazonaws.com vended-logs principal as CloudFront /
