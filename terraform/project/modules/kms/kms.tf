@@ -103,4 +103,34 @@ data "aws_iam_policy_document" "key" {
       }
     }
   }
+
+  # S3 delivers bucket event notifications (s3:ObjectRemoved:*) to an SSE-KMS
+  # SNS topic encrypted with this key. S3 calls kms:GenerateDataKey* / kms:Decrypt
+  # on our behalf to encrypt the message. Scoped to our own account so only this
+  # account's S3 service can use the key for SNS encryption.
+  dynamic "statement" {
+    for_each = each.value.s3_event_notifications ? { enabled = true } : {}
+
+    content {
+      sid    = "AllowS3EventNotificationPublish"
+      effect = "Allow"
+
+      principals {
+        type        = "Service"
+        identifiers = ["s3.amazonaws.com"]
+      }
+
+      actions = [
+        "kms:GenerateDataKey*",
+        "kms:Decrypt",
+      ]
+      resources = ["*"]
+
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [var.aws_account_id]
+      }
+    }
+  }
 }

@@ -52,3 +52,13 @@ output "ssm_parameter_arns" {
   description = "Map of service to SSM parameter ARN for Django secret key"
   value       = { for name, param in aws_ssm_parameter.django_secret_key : name => param.arn }
 }
+
+output "app_resources_bucket_id" {
+  description = "App resources bucket ID"
+  value       = aws_s3_bucket.app_resources.id
+}
+
+output "app_resources_bucket_arn" {
+  description = "App resources bucket ARN"
+  value       = aws_s3_bucket.app_resources.arn
+}

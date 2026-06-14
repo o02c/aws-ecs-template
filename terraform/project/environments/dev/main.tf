@@ -153,12 +153,14 @@ module "storage" {
   source   = "../../modules/storage"
   for_each = local.lanes
 
-  project_name  = var.project_name
-  environment   = var.environment
-  lane          = each.key
-  kms_key_arn   = module.kms.key_arns["s3"]
-  log_bucket_id = module.logging.bucket_id
-  log_prefix    = "s3/${each.key}/"
+  project_name                       = var.project_name
+  environment                        = var.environment
+  lane                               = each.key
+  kms_key_arn                        = module.kms.key_arns["s3"]
+  log_bucket_id                      = module.logging.bucket_id
+  log_prefix                         = "s3/${each.key}/"
+  object_lock                        = local.assets_object_lock
+  noncurrent_version_expiration_days = local.assets_noncurrent_version_expiration_days
 }
 
 # --------------------------------------------------------------------------------
@@ -244,6 +246,34 @@ module "monitoring" {
   aurora_cluster_identifier = module.db.cluster_identifier
   firehose_stream_names     = module.app.firehose_stream_names
   thresholds                = local.alarm_thresholds
+}
+
+# --------------------------------------------------------------------------------
+# S3 Events (object-deletion notifications → SNS)
+# --------------------------------------------------------------------------------
+# Watches every project bucket for s3:ObjectRemoved:* (lifecycle deletions are a
+# separate event type, so they are excluded automatically). The artifact bucket
+# (cicd, currently disabled) owns its own EventBridge notification and is omitted.
+
+module "s3_events" {
+  source = "../../modules/s3_events"
+
+  project_name            = var.project_name
+  environment             = var.environment
+  aws_account_id          = data.aws_caller_identity.current.account_id
+  kms_key_arn             = module.kms.key_arns["s3"]
+  notification_recipients = local.alarm_recipients
+
+  buckets = merge(
+    { for lane, m in module.storage : "assets-${lane}" => { id = m.bucket_id, arn = m.bucket_arn } },
+    {
+      app_resources  = { id = module.app.app_resources_bucket_id, arn = module.app.app_resources_bucket_arn }
+      sql            = { id = module.db_sql.sql_bucket_id, arn = module.db_sql.sql_bucket_arn }
+      access_logs    = { id = module.logging.bucket_id, arn = module.logging.bucket_arn }
+      waf_logs       = { id = module.logging.waf_bucket_id, arn = module.logging.waf_bucket_arn }
+      athena_results = { id = module.logging.athena_results_bucket_id, arn = module.logging.athena_results_bucket_arn }
+    },
+  )
 }
 
 # --------------------------------------------------------------------------------

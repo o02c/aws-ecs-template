@@ -174,6 +174,22 @@ locals {
     }
   }
 
+  # --------------------------------------------------------------------------------
+  # Front-end assets bucket Object Lock (WORM)
+  # --------------------------------------------------------------------------------
+  # ランサム/改ざん対策。GOVERNANCE は適切な権限で bypass 可 (運用掃除の逃げ道あり)。
+  # enabled=true は新規作成時のみ設定可能 (不可逆)。既存バケットに適用するには
+  # recreate が必要 → `just migrate-assets-object-lock` で退避→再配置する。
+  # noncurrent_version_expiration_days は retention (30d) より長く取る (90d)。
+  assets_object_lock = {
+    enabled = true
+    default_retention = {
+      mode = "GOVERNANCE"
+      days = 30
+    }
+  }
+  assets_noncurrent_version_expiration_days = 90
+
   # ALB idle timeout (connection keep-alive budget)
   alb_idle_timeout_seconds = 60
 
@@ -259,9 +275,10 @@ locals {
       service     = null
     }
     s3 = {
-      description        = "CMK for S3 bucket encryption"
-      service            = null
-      cloudfront_enabled = true
+      description            = "CMK for S3 bucket encryption (+ S3 event-notification SNS topic)"
+      service                = null
+      cloudfront_enabled     = true
+      s3_event_notifications = true
     }
     logs = {
       description = "CMK for CloudWatch Logs encryption"

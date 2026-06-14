@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Delete all object versions and delete markers from an S3 bucket."""
+"""Delete all object versions and delete markers from an S3 bucket.
+
+If the bucket has S3 Object Lock enabled (e.g. the front-end assets buckets,
+GOVERNANCE mode), delete-objects is sent with --bypass-governance-retention so
+locked versions can be removed during teardown. Requires the caller to hold
+s3:BypassGovernanceRetention. COMPLIANCE-mode locks cannot be bypassed by anyone
+and will (correctly) still fail until their retention expires.
+"""
 import json
 import subprocess
 import sys
@@ -7,6 +14,15 @@ import tempfile
 import os
 
 bucket = sys.argv[1]
+
+# Detect Object Lock once up front; only then pay the bypass flag.
+object_lock_enabled = (
+    subprocess.run(
+        ["aws", "s3api", "get-object-lock-configuration", "--bucket", bucket],
+        capture_output=True,
+    ).returncode
+    == 0
+)
 
 key_marker = ""
 version_id_marker = ""
@@ -29,10 +45,11 @@ while True:
             json.dump({"Objects": objects, "Quiet": True}, f)
             tmp = f.name
 
-        subprocess.run(
-            ["aws", "s3api", "delete-objects", "--bucket", bucket, "--delete", f"file://{tmp}"],
-            capture_output=True,
-        )
+        delete_cmd = ["aws", "s3api", "delete-objects", "--bucket", bucket, "--delete", f"file://{tmp}"]
+        if object_lock_enabled:
+            delete_cmd.append("--bypass-governance-retention")
+
+        subprocess.run(delete_cmd, capture_output=True)
         os.unlink(tmp)
 
     if not data.get("IsTruncated"):
