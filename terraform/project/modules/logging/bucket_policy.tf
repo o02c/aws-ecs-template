@@ -68,6 +68,11 @@ resource "aws_s3_bucket_policy" "access_logs" {
           }
         }
       },
+      # NOTE: unlike ALB/CloudFront/VPC-flow delivery, the S3 server-access-log
+      # service (logging.s3.amazonaws.com) does NOT send an x-amz-acl header, so
+      # an "s3:x-amz-acl = bucket-owner-full-control" condition here silently
+      # blocks delivery. Scope by SourceAccount only (matches the AWS console's
+      # auto-generated policy).
       {
         Sid    = "AllowS3LogDelivery"
         Effect = "Allow"
@@ -78,7 +83,6 @@ resource "aws_s3_bucket_policy" "access_logs" {
         Resource = "${aws_s3_bucket.access_logs.arn}/s3/*"
         Condition = {
           StringEquals = {
-            "s3:x-amz-acl"      = "bucket-owner-full-control"
             "aws:SourceAccount" = [var.aws_account_id]
           }
         }
