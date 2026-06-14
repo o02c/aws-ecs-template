@@ -44,6 +44,13 @@ resource "aws_s3_bucket_logging" "artifact" {
 
   target_bucket = var.log_bucket_id
   target_prefix = "artifact/"
+
+  # Date-partitioned keys for Athena (matches Firehose/VPC-flow layout).
+  target_object_key_format {
+    partitioned_prefix {
+      partition_date_source = "EventTime"
+    }
+  }
 }
 
 # --------------------------------------------------------------------------------

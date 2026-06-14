@@ -59,6 +59,13 @@ resource "aws_s3_bucket_logging" "app_resources" {
   bucket        = aws_s3_bucket.app_resources.id
   target_bucket = var.log_bucket_id
   target_prefix = "s3/app-resources/"
+
+  # Date-partitioned keys for Athena (matches Firehose/VPC-flow layout).
+  target_object_key_format {
+    partitioned_prefix {
+      partition_date_source = "EventTime"
+    }
+  }
 }
 
 # Current versions are retained forever (templates/config evolve under git+CI).
