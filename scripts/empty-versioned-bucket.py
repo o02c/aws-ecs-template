@@ -40,17 +40,24 @@ while True:
     objects = [{"Key": v["Key"], "VersionId": v["VersionId"]} for v in data.get("Versions", [])]
     objects += [{"Key": m["Key"], "VersionId": m["VersionId"]} for m in data.get("DeleteMarkers", [])]
 
-    if objects:
+    # delete-objects accepts at most 1000 keys per call. The AWS CLI auto-paginates
+    # list-object-versions and returns every version in one response, so for a
+    # version-heavy bucket `objects` can be far larger than 1000 — chunk it.
+    for i in range(0, len(objects), 1000):
+        batch = objects[i:i + 1000]
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({"Objects": objects, "Quiet": True}, f)
+            json.dump({"Objects": batch, "Quiet": True}, f)
             tmp = f.name
 
         delete_cmd = ["aws", "s3api", "delete-objects", "--bucket", bucket, "--delete", f"file://{tmp}"]
         if object_lock_enabled:
             delete_cmd.append("--bypass-governance-retention")
 
-        subprocess.run(delete_cmd, capture_output=True)
+        r = subprocess.run(delete_cmd, capture_output=True, text=True)
         os.unlink(tmp)
+        if r.returncode != 0:
+            sys.stderr.write(r.stderr)
+            sys.exit(1)
 
     if not data.get("IsTruncated"):
         break
