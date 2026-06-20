@@ -104,6 +104,37 @@ data "aws_iam_policy_document" "key" {
     }
   }
 
+  # CloudWatch Alarms publish to an SSE-KMS SNS topic encrypted with this key.
+  # CloudWatch calls kms:GenerateDataKey* / kms:Decrypt to encrypt the message.
+  # The generic `service` statement above conditions on the CloudWatch-Logs
+  # encryption context (aws:logs:arn), which alarm→SNS publishes do NOT carry,
+  # so this needs its own account-scoped statement (mirrors the S3 one below).
+  dynamic "statement" {
+    for_each = each.value.cloudwatch_sns_publish ? { enabled = true } : {}
+
+    content {
+      sid    = "AllowCloudWatchAlarmSnsPublish"
+      effect = "Allow"
+
+      principals {
+        type        = "Service"
+        identifiers = ["cloudwatch.amazonaws.com"]
+      }
+
+      actions = [
+        "kms:GenerateDataKey*",
+        "kms:Decrypt",
+      ]
+      resources = ["*"]
+
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [var.aws_account_id]
+      }
+    }
+  }
+
   # S3 delivers bucket event notifications (s3:ObjectRemoved:*) to an SSE-KMS
   # SNS topic encrypted with this key. S3 calls kms:GenerateDataKey* / kms:Decrypt
   # on our behalf to encrypt the message. Scoped to our own account so only this

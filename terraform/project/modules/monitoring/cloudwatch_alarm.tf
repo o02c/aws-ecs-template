@@ -5,6 +5,11 @@
 # (e.g. no traffic) does not trigger the alarm. `evaluation_periods` are
 # deliberately longer than the metric period to smooth over deploy blips
 # (see terraform-conventions §10 ECS healthCheck note).
+#
+# Each alarm ignores `actions_enabled` drift: the power_schedule module toggles
+# it on a schedule (disable during the stop window, enable on start), so it must
+# be owned at runtime, not by Terraform. Without this, `terraform apply` during a
+# stop window would re-enable alerts for intentionally-stopped resources.
 
 # --------------------------------------------------------------------------------
 # WARNING: ALB target 5xx spike (per lane)
@@ -30,6 +35,10 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
   tags = {
     Name = "${var.project_name}-${var.environment}-${each.value}-alb-5xx"
   }
+
+  lifecycle {
+    ignore_changes = [actions_enabled]
+  }
 }
 
 # --------------------------------------------------------------------------------
@@ -53,6 +62,10 @@ resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
 
   tags = {
     Name = "${var.project_name}-${var.environment}-aurora-cpu"
+  }
+
+  lifecycle {
+    ignore_changes = [actions_enabled]
   }
 }
 
@@ -79,6 +92,10 @@ resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
 
   tags = {
     Name = "${var.project_name}-${var.environment}-aurora-connections"
+  }
+
+  lifecycle {
+    ignore_changes = [actions_enabled]
   }
 }
 
@@ -137,6 +154,10 @@ resource "aws_cloudwatch_metric_alarm" "ecs_running_gap" {
   tags = {
     Name = "${var.project_name}-${var.environment}-${each.key}-running-gap"
   }
+
+  lifecycle {
+    ignore_changes = [actions_enabled]
+  }
 }
 
 # --------------------------------------------------------------------------------
@@ -166,6 +187,10 @@ resource "aws_cloudwatch_metric_alarm" "alb_healthy_host" {
   tags = {
     Name = "${var.project_name}-${var.environment}-${each.value}-healthy-host-zero"
   }
+
+  lifecycle {
+    ignore_changes = [actions_enabled]
+  }
 }
 
 # --------------------------------------------------------------------------------
@@ -191,5 +216,9 @@ resource "aws_cloudwatch_metric_alarm" "firehose_delivery_failure" {
 
   tags = {
     Name = "${var.project_name}-${var.environment}-firehose-${each.key}-failure"
+  }
+
+  lifecycle {
+    ignore_changes = [actions_enabled]
   }
 }

@@ -293,8 +293,9 @@ locals {
       service     = null
     }
     sns = {
-      description = "CMK for SNS topic encryption (CloudWatch Alarm publishes)"
-      service     = "cloudwatch.amazonaws.com"
+      description            = "CMK for SNS topic encryption (CloudWatch Alarm publishes)"
+      service                = null
+      cloudwatch_sns_publish = true
     }
   }
 
@@ -337,4 +338,29 @@ locals {
     user-api  = { lane = "user" }
     admin-api = { lane = "admin" }
   }
+
+  # Scheduled start/stop for cost savings. start / stop toggle independently
+  # (start.enabled = false => stop-only). cron is EventBridge Scheduler syntax in
+  # `timezone`. ECS start runs after DB start since Aurora takes minutes to boot.
+  power_schedule = {
+    timezone = "Asia/Tokyo"
+    db = {
+      stop  = { enabled = true, cron = "cron(0 22 ? * * *)" }
+      start = { enabled = true, cron = "cron(0 8 ? * MON-FRI *)" }
+    }
+    ecs = {
+      stop  = { enabled = true, cron = "cron(0 22 ? * * *)" }
+      start = { enabled = true, cron = "cron(10 8 ? * MON-FRI *)", desired_count = 1 }
+    }
+    alarms = {
+      stop  = { enabled = true, cron = "cron(55 21 ? * * *)" }
+      start = { enabled = true, cron = "cron(20 8 ? * MON-FRI *)" }
+    }
+  }
+
+  power_schedule_enabled = anytrue([
+    local.power_schedule.db.stop.enabled, local.power_schedule.db.start.enabled,
+    local.power_schedule.ecs.stop.enabled, local.power_schedule.ecs.start.enabled,
+    local.power_schedule.alarms.stop.enabled, local.power_schedule.alarms.start.enabled,
+  ])
 }
