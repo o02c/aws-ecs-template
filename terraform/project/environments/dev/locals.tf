@@ -208,9 +208,6 @@ locals {
   # Container port (ECS → ALB target group)
   container_port = 8081
 
-  # CloudFront WAF rate limit (requests per 5-min per IP)
-  waf_rate_limit = 2000
-
   # CloudFront geo restriction (ISO 3166-1 alpha-2 whitelist)
   geo_restriction_locations = ["JP"]
 
@@ -236,8 +233,8 @@ locals {
     alb_5xx_count                = 5
     aurora_cpu_percent           = 80
     aurora_connections           = 360 # ~80% of db.t4g.medium max_connections (~450)
-    ecs_running_gap_evaluations  = 5 # 1min × 5 = 5min sustained
-    alb_healthy_host_evaluations = 5 # 2min × 5 = 10min sustained
+    ecs_running_gap_evaluations  = 5   # 1min × 5 = 5min sustained
+    alb_healthy_host_evaluations = 5   # 2min × 5 = 10min sustained
   }
 
   # Aurora PostgreSQL cluster config. Change these to tune per env.
@@ -305,13 +302,6 @@ locals {
   lanes = {
     user  = { path_prefix = "" }
     admin = { path_prefix = "/admin" }
-  }
-
-  # WAF IP allowlist. scope = "admin" gates only the non-default lane's path
-  # (e.g. /admin*); "global" gates every request. Empty allowed_cidrs disables.
-  ip_allowlist = {
-    scope         = "admin"
-    allowed_cidrs = []
   }
 
   azs = ["${local.aws_region}a", "${local.aws_region}c"]

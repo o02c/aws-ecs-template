@@ -320,18 +320,17 @@ module "cdn" {
     }
   }
 
-  acm_certificate_arn       = module.cert.cloudfront_certificate_arn
-  hostname                  = var.domain_name
-  route53_zone_id           = module.dns.zone_id
-  enable_signing            = local.cloudfront_signing_enabled
-  signing_public_key_pem    = local.cloudfront_signing_public_key_pem
-  files_path_pattern        = local.signed_files_path_pattern
-  waf_rate_limit            = local.waf_rate_limit
-  ip_allowlist              = local.ip_allowlist
+  acm_certificate_arn    = module.cert.cloudfront_certificate_arn
+  hostname               = var.domain_name
+  route53_zone_id        = module.dns.zone_id
+  enable_signing         = local.cloudfront_signing_enabled
+  signing_public_key_pem = local.cloudfront_signing_public_key_pem
+  files_path_pattern     = local.signed_files_path_pattern
+  # WAF lives in shared state (per-domain allowlist + managed rules); "" = FMS attaches.
+  web_acl_arn               = try(data.terraform_remote_state.shared.outputs.cloudfront_web_acl_arn, "")
   geo_restriction_locations = local.geo_restriction_locations
   cache_ttl                 = local.cache_ttl
   log_bucket_arn            = module.logging.bucket_arn
-  waf_log_bucket_arn        = module.logging.waf_bucket_arn
   vpc_id                    = module.network.vpc_id
 }
 

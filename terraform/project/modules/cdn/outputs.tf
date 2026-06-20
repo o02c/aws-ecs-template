@@ -29,6 +29,6 @@ output "signing_key_group_id" {
 }
 
 output "waf_web_acl_arn" {
-  description = "WAF Web ACL ARN"
-  value       = aws_wafv2_web_acl.this.arn
+  description = "Associated WAF Web ACL ARN (the shared/FMS web_acl_arn, empty when FMS attaches)."
+  value       = var.web_acl_arn
 }

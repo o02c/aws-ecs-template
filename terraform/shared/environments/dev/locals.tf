@@ -62,4 +62,24 @@ locals {
     #   groups = ["developer"]
     # }
   }
+
+  # --------------------------------------------------------------------------------
+  # WAF — account-wide CLOUDFRONT Web ACL (per-domain IP allowlist, default-block)
+  # --------------------------------------------------------------------------------
+  # enabled=false in dev (no Firewall Manager). In prod: set enabled=true, point
+  # web_acl_name at the FMS-deployed ACL, `terraform import` it (see modules/waf),
+  # and register EVERY served domain below — default_action is block, so any Host
+  # absent here is fully blocked. Open domains must allow ["0.0.0.0/0"].
+  waf = {
+    enabled      = false
+    web_acl_name = "" # FMS-deployed ACL name to import (prod)
+    domains = {
+      # "app.example.com" = {
+      #   allowed_cidrs = ["0.0.0.0/0"] # open; narrow to restrict the whole domain
+      #   path_rules = [
+      #     { path = "/internal", allowed_cidrs = ["203.0.113.0/24"] },
+      #   ]
+      # }
+    }
+  }
 }
