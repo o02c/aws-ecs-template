@@ -56,25 +56,14 @@ variable "files_path_pattern" {
   type        = string
 }
 
-variable "waf_rate_limit" {
-  description = "Maximum number of requests per 5-minute period per IP"
-  type        = number
-}
-
-variable "ip_allowlist" {
-  description = "Optional WAF IP allowlist. scope=\"admin\" gates only the non-default lane's path; scope=\"global\" gates all paths. Empty allowed_cidrs disables the rule entirely."
-  type = object({
-    scope         = string
-    allowed_cidrs = list(string)
-  })
-  default = {
-    scope         = "admin"
-    allowed_cidrs = []
-  }
-  validation {
-    condition     = contains(["admin", "global"], var.ip_allowlist.scope)
-    error_message = "ip_allowlist.scope must be either \"admin\" or \"global\"."
-  }
+variable "web_acl_arn" {
+  description = <<-EOT
+    CLOUDFRONT Web ACL ARN to associate with the distribution. The WAF itself lives in
+    shared state (per-domain allowlist + managed rules); this module only references it.
+    Leave "" to let Firewall Manager attach the ACL (no explicit association).
+  EOT
+  type        = string
+  default     = ""
 }
 
 variable "geo_restriction_locations" {
@@ -84,11 +73,6 @@ variable "geo_restriction_locations" {
 
 variable "log_bucket_arn" {
   description = "ARN of the access-log S3 bucket. CloudFront standard logging v2 delivers under `cloudfront/` of this bucket in Hive-partitioned layout (see cloudwatch_log_delivery.tf)."
-  type        = string
-}
-
-variable "waf_log_bucket_arn" {
-  description = "ARN of the dedicated aws-waf-logs-* bucket (direct WAF → S3 destination)"
   type        = string
 }
 

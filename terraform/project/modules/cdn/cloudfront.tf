@@ -84,11 +84,12 @@ resource "aws_cloudfront_cache_policy" "static" {
 # --------------------------------------------------------------------------------
 
 resource "aws_cloudfront_distribution" "this" {
-  enabled             = true
-  is_ipv6_enabled     = true
-  comment             = "${var.project_name}-${var.environment}"
-  price_class         = "PriceClass_200"
-  web_acl_id          = aws_wafv2_web_acl.this.arn
+  enabled         = true
+  is_ipv6_enabled = true
+  comment         = "${var.project_name}-${var.environment}"
+  price_class     = "PriceClass_200"
+  # Shared/FMS Web ACL; "" leaves association to Firewall Manager.
+  web_acl_id          = var.web_acl_arn != "" ? var.web_acl_arn : null
   default_root_object = "index.html"
 
   # ALB origins (VPC origin) — one per lane.

@@ -49,3 +49,20 @@ module "iam" {
   environment  = var.environment
   users        = local.iam_users
 }
+
+# --------------------------------------------------------------------------------
+# WAF (account-wide CLOUDFRONT Web ACL: per-domain IP allowlist, default-block)
+# --------------------------------------------------------------------------------
+# Single Web ACL shared across every CloudFront in the account. In prod it is the
+# Firewall-Manager-deployed ACL (import it, see modules/waf/web_acl.tf); FMS owns
+# the association. Disabled in dev (no FMS); enable per-env via local.waf.enabled
+# once the domain allowlist and (prod) the imported ACL name are set.
+
+module "waf" {
+  source   = "../../modules/waf"
+  for_each = local.waf.enabled ? { this = true } : {}
+
+  name_prefix  = "${var.project_name}-${var.environment}"
+  web_acl_name = local.waf.web_acl_name
+  domains      = local.waf.domains
+}
