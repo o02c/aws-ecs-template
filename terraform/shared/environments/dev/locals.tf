@@ -66,20 +66,19 @@ locals {
   # --------------------------------------------------------------------------------
   # WAF — account-wide CLOUDFRONT Web ACL (per-domain IP allowlist, default-block)
   # --------------------------------------------------------------------------------
-  # enabled=false in dev (no Firewall Manager). In prod: set enabled=true, point
-  # web_acl_name at the FMS-deployed ACL, `terraform import` it (see modules/waf),
-  # and register EVERY served domain below — default_action is block, so any Host
-  # absent here is fully blocked. Open domains must allow ["0.0.0.0/0"].
+  # default_action is block, so EVERY served domain must be registered below or it
+  # is fully blocked; an open domain must allow ["0.0.0.0/0"].
+  # dev (this account, no Firewall Manager): Terraform creates the ACL and the
+  # project distribution associates it (module.cdn web_acl_arn reads the output) —
+  # WAF is explicitly present even though dev leaves the domain open.
+  # prod: point web_acl_name at the FMS-deployed ACL and `terraform import` it
+  # (FMS owns association); see modules/waf.
   waf = {
-    enabled      = false
-    web_acl_name = "" # FMS-deployed ACL name to import (prod)
+    enabled      = true
+    web_acl_name = "shared-dev-cloudfront" # dev: fresh Terraform-created ACL name
     domains = {
-      # "app.example.com" = {
-      #   allowed_cidrs = ["0.0.0.0/0"] # open; narrow to restrict the whole domain
-      #   path_rules = [
-      #     { path = "/internal", allowed_cidrs = ["203.0.113.0/24"] },
-      #   ]
-      # }
+      # dev domain left open; managed rules still apply. Narrow to restrict.
+      "oo2cc.click" = { allowed_cidrs = ["0.0.0.0/0"] }
     }
   }
 }
