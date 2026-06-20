@@ -235,7 +235,7 @@ locals {
   alarm_thresholds = {
     alb_5xx_count                = 5
     aurora_cpu_percent           = 80
-    aurora_connections           = 40
+    aurora_connections           = 360 # ~80% of db.t4g.medium max_connections (~450)
     ecs_running_gap_evaluations  = 5 # 1min × 5 = 5min sustained
     alb_healthy_host_evaluations = 5 # 2min × 5 = 10min sustained
   }

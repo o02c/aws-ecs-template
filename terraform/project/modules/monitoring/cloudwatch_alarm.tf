@@ -72,12 +72,13 @@ resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
 # --------------------------------------------------------------------------------
 # WARNING: Aurora connections nearing capacity
 # --------------------------------------------------------------------------------
-# 0.5 ACU Aurora Serverless v2 has max_connections ≈ 45, so 40 leaves
-# headroom for a backend restart before saturation.
+# db.t4g.medium (provisioned, 4 GiB) → default max_connections ≈ 450 via
+# LEAST({DBInstanceClassMemory/9531392}, 5000). Alarm at ~80% so a connection
+# leak/storm is caught with headroom before saturation.
 
 resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
   alarm_name          = "${var.project_name}-${var.environment}-aurora-connections"
-  alarm_description   = "Aurora DB connection count approaching max_connections for current ACU"
+  alarm_description   = "Aurora DB connection count approaching max_connections (db.t4g.medium ≈ 450)"
   alarm_actions       = [aws_sns_topic.alert["warning"].arn]
   ok_actions          = [aws_sns_topic.alert["warning"].arn]
   treat_missing_data  = "notBreaching"
@@ -206,9 +207,13 @@ resource "aws_cloudwatch_metric_alarm" "firehose_delivery_failure" {
   ok_actions          = [aws_sns_topic.alert["critical"].arn]
   treat_missing_data  = "notBreaching"
   namespace           = "AWS/Firehose"
-  metric_name         = "DeliveryToS3.Records"
+  # DeliveryToS3.Success is the success ratio (1.0 = every record delivered).
+  # < 1 means some records failed to land in S3 — the actual failure signal.
+  # (DeliveryToS3.Records would instead read 0 on idle / no-traffic periods —
+  # e.g. while ECS is stopped by power_schedule — and false-fire.)
+  metric_name         = "DeliveryToS3.Success"
   dimensions          = { DeliveryStreamName = each.value }
-  statistic           = "Sum"
+  statistic           = "Average"
   period              = 300
   evaluation_periods  = 1
   threshold           = 1
