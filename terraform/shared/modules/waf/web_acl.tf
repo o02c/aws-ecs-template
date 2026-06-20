@@ -61,6 +61,9 @@ resource "aws_wafv2_web_acl" "fms" {
           }
 
           # uri starts_with path (path rules only)
+          # NOTE: STARTS_WITH is a raw string prefix, not a path-segment match
+          # ("/api" also matches "/apixyz"). Over-blocks only, never over-permits.
+          # A regex match (e.g. "^/api(/|$)") would be the proper fix; see locals.tf.
           dynamic "statement" {
             for_each = rule.value.path != "" ? [1] : []
             content {

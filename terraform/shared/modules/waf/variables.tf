@@ -25,7 +25,7 @@ variable "domains" {
     Per-domain ALLOW policy for the default-block Web ACL. default_action is block,
     so any request to a Host not matched by an allow rule generated here is BLOCKED.
     A domain MUST appear here or it is fully blocked; an unrestricted domain must
-    allow ["0.0.0.0/0", "::/0"].
+    allow ["0.0.0.0/0"] (IPv4 only — see below).
 
     Keyed by the public FQDN (matched case-insensitively against the request Host).
       - allowed_cidrs: base allowlist for the domain (IPv4), covering every path
