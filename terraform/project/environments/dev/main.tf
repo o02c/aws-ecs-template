@@ -249,6 +249,28 @@ module "monitoring" {
 }
 
 # --------------------------------------------------------------------------------
+# Power Schedule (scheduled start/stop of DB / ECS / alarms for cost savings)
+# --------------------------------------------------------------------------------
+
+module "power_schedule" {
+  source   = "../../modules/power_schedule"
+  for_each = local.power_schedule_enabled ? { this = true } : {}
+
+  project_name   = var.project_name
+  environment    = var.environment
+  aws_account_id = data.aws_caller_identity.current.account_id
+  aws_region     = local.aws_region
+
+  schedule = local.power_schedule
+
+  db_cluster_identifier = module.db.cluster_identifier
+  db_cluster_arn        = module.db.cluster_arn
+  ecs_cluster_name      = module.app.ecs_cluster_name
+  ecs_service_names     = toset(keys(local.services))
+  alarm_arns            = module.monitoring.alarm_arns
+}
+
+# --------------------------------------------------------------------------------
 # S3 Events (object-deletion notifications → SNS)
 # --------------------------------------------------------------------------------
 # Watches every project bucket for s3:ObjectRemoved:* (lifecycle deletions are a
