@@ -353,4 +353,19 @@ locals {
     local.power_schedule.ecs.stop.enabled, local.power_schedule.ecs.start.enabled,
     local.power_schedule.alarms.stop.enabled, local.power_schedule.alarms.start.enabled,
   ])
+
+  # Maintenance window. CloudFront serves a 503 page (KVS-gated viewer-request
+  # function) while the gate is on. Aligned with power_schedule so the frontend
+  # shows a friendly page while ECS/DB are stopped overnight. `on` opens the
+  # window, `off` closes it; toggle independently.
+  maintenance_schedule = {
+    timezone = "Asia/Tokyo"
+    on       = { enabled = true, cron = "cron(0 22 ? * * *)" }
+    off      = { enabled = true, cron = "cron(0 8 ? * MON-FRI *)" }
+  }
+
+  maintenance_schedule_enabled = anytrue([
+    local.maintenance_schedule.on.enabled,
+    local.maintenance_schedule.off.enabled,
+  ])
 }

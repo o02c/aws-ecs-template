@@ -270,6 +270,19 @@ module "power_schedule" {
   alarm_arns            = module.monitoring.alarm_arns
 }
 
+module "maintenance" {
+  source   = "../../modules/maintenance"
+  for_each = local.maintenance_schedule_enabled ? { this = true } : {}
+
+  project_name   = var.project_name
+  environment    = var.environment
+  aws_account_id = data.aws_caller_identity.current.account_id
+
+  kvs_arn          = module.cdn.maintenance_kvs_arn
+  logs_kms_key_arn = module.kms.key_arns["logs"]
+  schedule         = local.maintenance_schedule
+}
+
 # --------------------------------------------------------------------------------
 # S3 Events (object-deletion notifications → SNS)
 # --------------------------------------------------------------------------------
