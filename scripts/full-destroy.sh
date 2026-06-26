@@ -42,6 +42,33 @@ list_tagged_buckets() {
     | sort -u
 }
 
+# Pre-destroy: silence alerts before anything starts deleting. Emptying versioned
+# buckets fires thousands of S3 ObjectRemoved events (-> s3-events SNS -> email),
+# and tearing resources down trips CloudWatch alarms. Clear bucket notification
+# configs and disable alarm actions FIRST so the teardown stays quiet. Both are
+# best-effort (the resources get destroyed by terraform afterwards anyway).
+disable_alerts() {
+  local region="${1:-$AWS_REGION}"
+  local buckets
+  buckets="$(list_tagged_buckets "$region" || true)"
+  while IFS= read -r bucket; do
+    [ -z "$bucket" ] && continue
+    aws s3api put-bucket-notification-configuration \
+      --bucket "$bucket" --notification-configuration '{}' 2>/dev/null \
+      && echo "  cleared S3 notifications: ${bucket}" || true
+  done <<< "$buckets"
+
+  local alarms
+  alarms="$(aws cloudwatch describe-alarms --region "$region" \
+    --alarm-name-prefix "${PROJECT_NAME}-${ENVIRONMENT}-" \
+    --query 'MetricAlarms[].AlarmName' --output text 2>/dev/null || true)"
+  if [ -n "$alarms" ]; then
+    # shellcheck disable=SC2086  # word-split the name list into separate args
+    aws cloudwatch disable-alarm-actions --region "$region" --alarm-names $alarms 2>/dev/null \
+      && echo "  disabled CloudWatch alarm actions" || true
+  fi
+}
+
 # Empty every TF-tagged bucket, including versioned objects.
 empty_tagged_buckets() {
   local region="${1:-$AWS_REGION}"
@@ -101,10 +128,17 @@ delete_log_groups_matching() {
 echo "=== Full Destroy: ${PROJECT_NAME}-${ENVIRONMENT} ==="
 
 # --------------------------------------------------------------------------------
-# 1. Delete ECS Services
+# 1. Disable alerts FIRST (before emptying buckets / tearing down)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [1/7] Delete ECS Services ---"
+echo "--- [1/8] Disable alerts (S3 notifications + CloudWatch alarms) ---"
+disable_alerts
+
+# --------------------------------------------------------------------------------
+# 2. Delete ECS Services
+# --------------------------------------------------------------------------------
+echo ""
+echo "--- [2/8] Delete ECS Services ---"
 for service in user-api admin-api; do
   echo "  Deleting ${service}..."
   (cd "ecs/${service}" && ecspresso delete --force --terminate 2>&1 | tail -1) || true
@@ -121,17 +155,17 @@ done
 echo "  done"
 
 # --------------------------------------------------------------------------------
-# 2. Empty S3 Buckets (first pass - before terraform destroy)
+# 3. Empty S3 Buckets (first pass - before terraform destroy)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [2/7] Empty S3 Buckets (first pass, tag-based discovery) ---"
+echo "--- [3/8] Empty S3 Buckets (first pass, tag-based discovery) ---"
 empty_tagged_buckets
 
 # --------------------------------------------------------------------------------
-# 3. Delete ECR Pull-through Cache Repos (AWS auto-creates these, not TF-tagged)
+# 4. Delete ECR Pull-through Cache Repos (AWS auto-creates these, not TF-tagged)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [3/7] Delete ECR Cache Repos ---"
+echo "--- [4/8] Delete ECR Cache Repos ---"
 repos=$(aws ecr describe-repositories --query 'repositories[?starts_with(repositoryName, `ecr-public/`)].repositoryName' --output text 2>/dev/null || true)
 for repo in $repos; do
   echo "  Deleting ${repo}"
@@ -139,34 +173,34 @@ for repo in $repos; do
 done
 
 # --------------------------------------------------------------------------------
-# 4. Destroy Project Infrastructure (retry + re-empty on BucketNotEmpty)
+# 5. Destroy Project Infrastructure (retry + re-empty on BucketNotEmpty)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [4/7] Destroy Project Infrastructure ---"
+echo "--- [5/8] Destroy Project Infrastructure ---"
 terraform -chdir=terraform/project/environments/${ENVIRONMENT} init -upgrade -input=false
 tf_destroy_with_retry "terraform/project/environments/${ENVIRONMENT}"
 
 # --------------------------------------------------------------------------------
-# 5. Empty S3 Buckets (second pass - belt-and-suspenders before shared destroy)
+# 6. Empty S3 Buckets (second pass - belt-and-suspenders before shared destroy)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [5/7] Empty S3 Buckets (second pass, tag-based discovery) ---"
+echo "--- [6/8] Empty S3 Buckets (second pass, tag-based discovery) ---"
 empty_tagged_buckets
 
 # --------------------------------------------------------------------------------
-# 6. Destroy Shared Infrastructure (retry + re-empty; -refresh=false for PHZ)
+# 7. Destroy Shared Infrastructure (retry + re-empty; -refresh=false for PHZ)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [6/7] Destroy Shared Infrastructure ---"
+echo "--- [7/8] Destroy Shared Infrastructure ---"
 terraform -chdir=terraform/shared/environments/${ENVIRONMENT} init -upgrade -input=false
 # -refresh=false avoids dns_entry[0] empty collection error during endpoint+PHZ destroy
 tf_destroy_with_retry "terraform/shared/environments/${ENVIRONMENT}" -refresh=false
 
 # --------------------------------------------------------------------------------
-# 7. Cleanup orphaned CloudWatch Log Groups (AWS auto-creates these; not TF-managed)
+# 8. Cleanup orphaned CloudWatch Log Groups (AWS auto-creates these; not TF-managed)
 # --------------------------------------------------------------------------------
 echo ""
-echo "--- [7/7] Cleanup orphan Log Groups (pattern-based) ---"
+echo "--- [8/8] Cleanup orphan Log Groups (pattern-based) ---"
 # Patterns cover: VPC flow logs, ECS task/exec logs for our cluster, and WAF logs.
 delete_log_groups_matching "$AWS_REGION" \
   "/aws/vpc/flow-log/*" \
