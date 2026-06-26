@@ -32,3 +32,13 @@ output "waf_web_acl_arn" {
   description = "Associated WAF Web ACL ARN (the shared/FMS web_acl_arn, empty when FMS attaches)."
   value       = var.web_acl_arn
 }
+
+output "maintenance_kvs_arn" {
+  description = "ARN of the maintenance-gate KeyValueStore (written by the maintenance module)"
+  value       = aws_cloudfront_key_value_store.maintenance.arn
+}
+
+output "maintenance_kvs_name" {
+  description = "Name of the maintenance-gate KeyValueStore"
+  value       = aws_cloudfront_key_value_store.maintenance.name
+}

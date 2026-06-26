@@ -26,19 +26,15 @@ data "aws_iam_policy_document" "assume" {
       identifiers = ["scheduler.amazonaws.com"]
     }
 
+    # Confused-deputy guard scoped to this account. An aws:SourceArn ArnLike on
+    # the schedule group is NOT added: EventBridge Scheduler's create-time role
+    # validation performs the assume without populating aws:SourceArn, so an
+    # ArnLike condition rejects CreateSchedule with "must allow Scheduler to
+    # assume the role". aws:SourceAccount alone is the AWS-recommended minimum.
     condition {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
       values   = [var.aws_account_id]
-    }
-
-    # Confused-deputy guard: only schedules in this module's own group may
-    # assume the role (it can stop the DB and scale ECS to 0). Scoped to the
-    # group name (no resource ref to the schedules themselves, so no cycle).
-    condition {
-      test     = "ArnLike"
-      variable = "aws:SourceArn"
-      values   = ["arn:aws:scheduler:${var.aws_region}:${var.aws_account_id}:schedule/${aws_scheduler_schedule_group.this.name}/*"]
     }
   }
 }
@@ -46,6 +42,10 @@ data "aws_iam_policy_document" "assume" {
 resource "aws_iam_role" "this" {
   name               = "${var.project_name}-${var.environment}-power-schedule"
   assume_role_policy = data.aws_iam_policy_document.assume.json
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-power-schedule"
+  }
 }
 
 data "aws_iam_policy_document" "this" {

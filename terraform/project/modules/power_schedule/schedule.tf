@@ -55,6 +55,10 @@ locals {
 
 resource "aws_scheduler_schedule_group" "this" {
   name = "${var.project_name}-${var.environment}-power"
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-power"
+  }
 }
 
 resource "aws_scheduler_schedule" "this" {
